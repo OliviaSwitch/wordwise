@@ -8,6 +8,8 @@
  * chapter HTML files, and re-bundles.
  */
 
+import JSZip from 'jszip';
+
 /**
  * Parse an EPUB ArrayBuffer into document content.
  * @param {ArrayBuffer} buffer
@@ -15,7 +17,6 @@
  * @returns {Promise<{title: string, content: string, rawContent: ArrayBuffer}>}
  */
 export async function parseEpub(buffer, annotateFn) {
-  const JSZip = await importJSZip();
   const zip = await JSZip.loadAsync(buffer);
 
   // Find the OPF file from META-INF/container.xml
@@ -52,7 +53,6 @@ export async function parseEpub(buffer, annotateFn) {
  * @returns {Promise<Blob>}
  */
 export async function exportEpub(originalBuffer, annotateFn) {
-  const JSZip = await importJSZip();
   const zip = await JSZip.loadAsync(originalBuffer);
 
   // Find OPF path
@@ -127,14 +127,4 @@ function parseOpf(xml, opfDir) {
   }
 
   return { title, spine, manifest };
-}
-
-/**
- * Dynamically import JSZip from CDN.
- * @returns {Promise<typeof import('jszip')>}
- */
-async function importJSZip() {
-  if (window.JSZip) return window.JSZip;
-  const module = await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js');
-  return module.default || module;
 }
