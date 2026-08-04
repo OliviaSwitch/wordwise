@@ -6,9 +6,16 @@
  *
  * Export: takes the original EPUB zip, injects ruby annotations into
  * chapter HTML files, and re-bundles.
+ *
+ * JSZip is loaded globally via <script> tag in index.html (UMD build).
  */
 
-import JSZip from 'jszip';
+function getJSZip() {
+  if (!window.JSZip || !window.JSZip.loadAsync) {
+    throw new Error('JSZip not loaded. Ensure the script tag is present in index.html.');
+  }
+  return window.JSZip;
+}
 
 /**
  * Parse an EPUB ArrayBuffer into document content.
@@ -17,6 +24,7 @@ import JSZip from 'jszip';
  * @returns {Promise<{title: string, content: string, rawContent: ArrayBuffer}>}
  */
 export async function parseEpub(buffer, annotateFn) {
+  const JSZip = getJSZip();
   const zip = await JSZip.loadAsync(buffer);
 
   // Find the OPF file from META-INF/container.xml
@@ -53,6 +61,7 @@ export async function parseEpub(buffer, annotateFn) {
  * @returns {Promise<Blob>}
  */
 export async function exportEpub(originalBuffer, annotateFn) {
+  const JSZip = getJSZip();
   const zip = await JSZip.loadAsync(originalBuffer);
 
   // Find OPF path
