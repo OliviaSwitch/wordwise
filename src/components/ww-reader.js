@@ -93,12 +93,20 @@ export class WwReader extends HTMLElement {
   async #render() {
     const container = this.shadowRoot.querySelector('#reader-content');
 
-    // Re-annotate based on current level + blacklist + whitelist
-    await initGloss();
-    const rawContent = this.#doc.rawContent
-      ? (typeof this.#doc.rawContent === 'string' ? this.#doc.rawContent : '')
-      : this.#extractTextFromAnnotated(this.#doc.content);
+    // Re-annotate based on current level + blacklist + whitelist.
+    // For text & HTML documents, rawContent is the original plain text/HTML
+    // (a string) — use it directly so structure is preserved.
+    // For EPUB documents, rawContent is the original ArrayBuffer (kept for
+    // re-export); we re-annotate from the stored annotated content instead,
+    // extracting plain English text out of it first.
+    let rawContent;
+    if (typeof this.#doc.rawContent === 'string') {
+      rawContent = this.#doc.rawContent;
+    } else {
+      rawContent = this.#extractTextFromAnnotated(this.#doc.content);
+    }
 
+    await initGloss();
     const annotated = annotateHtml(rawContent, this.#level, this.#blacklist, this.#whitelist);
     container.innerHTML = annotated;
 
