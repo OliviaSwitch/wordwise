@@ -3,11 +3,15 @@
  *
  * Orchestrates: tokenization → gloss lookup → CEFR filter → ruby injection
  *
- * Two parsing routes:
- * - Full XHTML/HTML documents (input starts with `<?xml` or `<html`) are
- *   parsed strictly as XHTML and serialized back with XMLSerializer, which
- *   preserves the `<?xml?>` declaration, root tags, and self-closing void
- *   elements. This is what EPUB chapter export and full-HTML export need.
+ * Three parsing routes:
+ * - Full XHTML documents (input starts with `<?xml`) are parsed strictly as
+ *   XHTML and serialized back with XMLSerializer, which preserves the `<?xml?>`
+ *   declaration, root tags, and self-closing void elements. Used by EPUB
+ *   chapter export.
+ * - Full HTML documents (input starts with `<!DOCTYPE` or `<html`) are parsed
+ *   leniently as HTML5 and re-serialized via the root element's outerHTML,
+ *   preserving the doctype, `<html>` root, `<head>`, and `<body>`. Used by
+ *   full-HTML file export.
  * - Fragments / plain text go through the lenient HTML5 path (wrapped in a
  *   `<div>`, serialized via innerHTML). Used by the reading view and for
  *   pasted-text export.
@@ -35,9 +39,10 @@ export function initGloss() {
 /**
  * Annotate raw content with ruby annotations.
  *
- * Full documents (starting with `<?xml` or `<html`) are routed to the strict
- * XHTML path so exported EPUB/HTML keeps valid XHTML structure; everything
- * else goes through the lenient HTML5 fragment path.
+ * Full documents are routed by their leading marker:
+ * - `<?xml` → strict XHTML path (EPUB chapters)
+ * - `<!DOCTYPE` or `<html` → lenient HTML5 document path (full HTML files)
+ * Anything else is treated as a fragment or plain text.
  *
  * @param {string} html — raw HTML (may contain tags)
  * @param {string} level — CEFR level
@@ -46,8 +51,12 @@ export function initGloss() {
  * @returns {string} annotated HTML
  */
 export function annotateHtml(html, level, blacklist, whitelist) {
-  if (/^\s*(<\?xml|<html\b)/i.test(html)) {
+  const trimmed = html.trimStart();
+  if (/^<\?xml/i.test(trimmed)) {
     return annotateXhtmlDocument(html, level, blacklist, whitelist);
+  }
+  if (/^<!doctype/i.test(trimmed) || /^<html\b/i.test(trimmed)) {
+    return annotateHtmlDocument(html, level, blacklist, whitelist);
   }
   return annotateHtmlFragment(html, level, blacklist, whitelist);
 }
@@ -123,6 +132,41 @@ export function annotateXhtmlDocument(html, level, blacklist, whitelist) {
   const body = serialized.replace(/^\s*<\?xml[^>]*\?>\s*/i, '');
   const decl = prepped.match(/^\s*<\?xml[^>]*\?>\s*/i);
   return decl ? decl[0] + body : body;
+}
+
+/**
+ * Annotate a full HTML5 document, preserving the document wrapper.
+ *
+ * Parses leniently as text/html (an HTML5 doc with void elements like
+ * `<meta charset>` is not well-formed XML, so the strict XHTML path would
+ * fail), annotates only the body, then re-serializes via the root element's
+ * outerHTML — which keeps the `<html>` root with its attributes, `<head>`,
+ * and `<body>`. The doctype, which outerHTML does not emit, is captured from
+ * the input and re-attached.
+ *
+ * @param {string} html — full HTML document string
+ * @param {string} level — CEFR level
+ * @param {string[]} blacklist — words to skip
+ * @param {string[]} whitelist — words to always annotate
+ * @returns {string} annotated HTML document
+ */
+function annotateHtmlDocument(html, level, blacklist, whitelist) {
+  if (!glossIndex) throw new Error('GlossIndex not loaded. Call initGloss() first.');
+
+  const blacklistSet = new Set(blacklist.map(w => w.toLowerCase()));
+  const whitelistSet = new Set(whitelist.map(w => w.toLowerCase()));
+
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const body = doc.body || doc.documentElement;
+
+  walkTextNodes(body, (text) => {
+    const plans = planGlosses(text, glossIndex, level, blacklistSet, whitelistSet);
+    return renderAnnotations(plans);
+  });
+
+  const doctype = html.match(/^\s*<!doctype[^>]*>\s*/i);
+  const serialized = doc.documentElement.outerHTML;
+  return (doctype ? doctype[0].trim() + '\n' : '') + serialized;
 }
 
 /**
