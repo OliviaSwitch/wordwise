@@ -14,6 +14,7 @@ import { parseEpub } from '../lib/epub.js';
 
 const template = document.createElement('template');
 template.innerHTML = `
+  <link rel="stylesheet" href="src/styles/main.css">
   <div>
     <div class="page-header">
       <h1>WordWise</h1>

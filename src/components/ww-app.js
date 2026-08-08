@@ -11,6 +11,7 @@ import { initGloss } from '../lib/annotator.js';
 
 const template = document.createElement('template');
 template.innerHTML = `
+  <link rel="stylesheet" href="src/styles/main.css">
   <div>
     <nav class="top-nav">
       <a data-view="shelf" class="active">Shelf</a>

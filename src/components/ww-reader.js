@@ -15,6 +15,7 @@ import { CEFR_LEVELS } from '../lib/gloss-engine.js';
 
 const template = document.createElement('template');
 template.innerHTML = `
+  <link rel="stylesheet" href="src/styles/main.css">
   <div>
     <div class="reader-toolbar">
       <button class="back-btn" id="back-btn">← Back</button>
