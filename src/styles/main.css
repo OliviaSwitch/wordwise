@@ -209,6 +209,11 @@ button:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   gap: 8px;
 }
 
+/* `display: flex` above overrides the hidden attribute's default, so re-hide explicitly. */
+.reader-toolbar .chapter-nav[hidden] {
+  display: none;
+}
+
 .reader-toolbar .chapter-nav #chapter-indicator {
   font-size: 0.875rem;
   color: var(--color-text-secondary);
