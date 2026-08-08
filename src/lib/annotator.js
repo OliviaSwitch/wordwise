@@ -2,6 +2,15 @@
  * annotator — generates annotated HTML from raw content
  *
  * Orchestrates: tokenization → gloss lookup → CEFR filter → ruby injection
+ *
+ * Two parsing routes:
+ * - Full XHTML/HTML documents (input starts with `<?xml` or `<html`) are
+ *   parsed strictly as XHTML and serialized back with XMLSerializer, which
+ *   preserves the `<?xml?>` declaration, root tags, and self-closing void
+ *   elements. This is what EPUB chapter export and full-HTML export need.
+ * - Fragments / plain text go through the lenient HTML5 path (wrapped in a
+ *   `<div>`, serialized via innerHTML). Used by the reading view and for
+ *   pasted-text export.
  */
 
 import { GlossIndex, planGlosses, CEFR_LEVELS } from './gloss-engine.js';
@@ -24,7 +33,11 @@ export function initGloss() {
 }
 
 /**
- * Annotate raw HTML content with ruby annotations.
+ * Annotate raw content with ruby annotations.
+ *
+ * Full documents (starting with `<?xml` or `<html`) are routed to the strict
+ * XHTML path so exported EPUB/HTML keeps valid XHTML structure; everything
+ * else goes through the lenient HTML5 fragment path.
  *
  * @param {string} html — raw HTML (may contain tags)
  * @param {string} level — CEFR level
@@ -33,31 +46,106 @@ export function initGloss() {
  * @returns {string} annotated HTML
  */
 export function annotateHtml(html, level, blacklist, whitelist) {
+  if (/^\s*(<\?xml|<html\b)/i.test(html)) {
+    return annotateXhtmlDocument(html, level, blacklist, whitelist);
+  }
+  return annotateHtmlFragment(html, level, blacklist, whitelist);
+}
+
+/**
+ * Common HTML5 named entities mapped to numeric XML-safe equivalents.
+ * EPUB content frequently uses these; XML strict parsing rejects them.
+ */
+const NAMED_ENTITY_MAP = {
+  '&nbsp;': '&#160;',
+  '&copy;': '&#169;',
+  '&hellip;': '&#8230;',
+  '&mdash;': '&#8212;',
+  '&ndash;': '&#8211;',
+  '&ldquo;': '&#8220;',
+  '&rdquo;': '&#8221;',
+  '&lsquo;': '&#8216;',
+  '&rsquo;': '&#8217;',
+};
+
+/**
+ * Replace the most common HTML5 named entities with numeric entities so the
+ * string survives strict XML parsing. Unknown entities are left untouched.
+ * @param {string} s
+ * @returns {string}
+ */
+function replaceNamedEntities(s) {
+  return s.replace(/&[a-z]+;/gi, (match) => {
+    const replacement = NAMED_ENTITY_MAP[match.toLowerCase()];
+    return replacement !== undefined ? replacement : match;
+  });
+}
+
+/**
+ * Annotate a full XHTML document, preserving strict XML structure.
+ *
+ * Named entities are normalized to numeric entities before the strict parse;
+ * if the parse still fails, falls back to the lenient fragment path so
+ * reading/export never crashes on unusual input.
+ *
+ * @param {string} html — full XHTML document string
+ * @param {string} level — CEFR level
+ * @param {string[]} blacklist — words to skip
+ * @param {string[]} whitelist — words to always annotate
+ * @returns {string} annotated XHTML document
+ */
+export function annotateXhtmlDocument(html, level, blacklist, whitelist) {
   if (!glossIndex) throw new Error('GlossIndex not loaded. Call initGloss() first.');
 
   const blacklistSet = new Set(blacklist.map(w => w.toLowerCase()));
   const whitelistSet = new Set(whitelist.map(w => w.toLowerCase()));
 
-  // Process text nodes within HTML, leaving tags intact
-  return annotateTextNodes(html, (text) => {
+  const prepped = replaceNamedEntities(html);
+  const doc = new DOMParser().parseFromString(prepped, 'application/xhtml+xml');
+
+  // XML strict mode reports parse failures by producing a <parsererror> root.
+  if (!doc.documentElement || doc.documentElement.nodeName.toLowerCase() !== 'html') {
+    console.warn('[annotator] XHTML strict parse failed; falling back to lenient HTML parsing.');
+    return annotateHtmlFragment(html, level, blacklist, whitelist);
+  }
+
+  // Only the body is reading content — leave <head> untouched.
+  const container = doc.getElementsByTagName('body')[0] || doc.documentElement;
+  walkTextNodes(container, (text) => {
     const plans = planGlosses(text, glossIndex, level, blacklistSet, whitelistSet);
     return renderAnnotations(plans);
   });
+
+  // Whether XMLSerializer re-emits the XML declaration varies by browser —
+  // Chrome does, Firefox doesn't. Normalize: strip whatever it emitted, then
+  // re-attach the original declaration from the input so only one appears.
+  const serialized = new XMLSerializer().serializeToString(doc);
+  const body = serialized.replace(/^\s*<\?xml[^>]*\?>\s*/i, '');
+  const decl = prepped.match(/^\s*<\?xml[^>]*\?>\s*/i);
+  return decl ? decl[0] + body : body;
 }
 
 /**
- * Walk HTML and annotate text nodes, preserving HTML structure.
+ * Annotate an HTML fragment or plain text using the lenient HTML5 path.
  * @param {string} html
- * @param {(text: string) => string} annotateText
+ * @param {string} level — CEFR level
+ * @param {string[]} blacklist — words to skip
+ * @param {string[]} whitelist — words to always annotate
  * @returns {string}
  */
-function annotateTextNodes(html, annotateText) {
-  // Use DOM parsing to handle this properly
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+function annotateHtmlFragment(html, level, blacklist, whitelist) {
+  if (!glossIndex) throw new Error('GlossIndex not loaded. Call initGloss() first.');
+
+  const blacklistSet = new Set(blacklist.map(w => w.toLowerCase()));
+  const whitelistSet = new Set(whitelist.map(w => w.toLowerCase()));
+
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
   const container = doc.body.firstElementChild;
 
-  walkTextNodes(container, annotateText);
+  walkTextNodes(container, (text) => {
+    const plans = planGlosses(text, glossIndex, level, blacklistSet, whitelistSet);
+    return renderAnnotations(plans);
+  });
 
   return container.innerHTML;
 }
@@ -71,8 +159,12 @@ function walkTextNodes(node, fn) {
   if (node.nodeType === Node.TEXT_NODE) {
     const text = node.textContent;
     if (text.trim().length > 0) {
-      const fragment = document.createElement('span');
-      fragment.innerHTML = fn(text);
+      // Parse the annotated HTML into a fragment so the text lands directly
+      // under the original parent — no extra <span> wrapper. The range must
+      // come from the node's own document (the XHTML path operates on a
+      // different document than the main one).
+      const range = node.ownerDocument.createRange();
+      const fragment = range.createContextualFragment(fn(text));
       node.parentNode.replaceChild(fragment, node);
     }
   } else if (node.nodeType === Node.ELEMENT_NODE) {
@@ -113,5 +205,7 @@ function renderAnnotations(plans) {
 function escapeHtml(s) {
   const div = document.createElement('div');
   div.appendChild(document.createTextNode(s));
-  return div.innerHTML;
+  // innerHTML serializes U+00A0 as &nbsp;, which is not a valid XML entity and
+  // breaks createContextualFragment on the XHTML path — emit &#160; instead.
+  return div.innerHTML.replace(/&nbsp;/g, '&#160;');
 }
