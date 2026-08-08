@@ -203,6 +203,19 @@ button:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .reader-toolbar .back-btn { margin-right: auto; }
 
+.reader-toolbar .chapter-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reader-toolbar .chapter-nav #chapter-indicator {
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  min-width: 3.5em;
+  text-align: center;
+}
+
 .reader-toolbar .level-selector {
   display: flex;
   align-items: center;

@@ -2,7 +2,8 @@
  * EPUB utilities — import and export using JSZip.
  *
  * Import: unzips the EPUB, reads OPF to find the spine and manifest,
- * extracts chapter HTML in order, merges into one document.
+ * extracts chapter HTML in order as raw strings (annotation happens later,
+ * one chapter at a time, in the reader).
  *
  * Export: takes the original EPUB zip, injects ruby annotations into
  * chapter HTML files, and re-bundles.
@@ -18,12 +19,11 @@ function getJSZip() {
 }
 
 /**
- * Parse an EPUB ArrayBuffer into document content.
+ * Parse an EPUB ArrayBuffer into its raw chapters.
  * @param {ArrayBuffer} buffer
- * @param {(html: string) => string} annotateFn — function that takes raw HTML and returns annotated HTML
- * @returns {Promise<{title: string, content: string, rawContent: ArrayBuffer}>}
+ * @returns {Promise<{title: string, chapters: string[]}>}
  */
-export async function parseEpub(buffer, annotateFn) {
+export async function parseEpub(buffer) {
   const JSZip = getJSZip();
   const zip = await JSZip.loadAsync(buffer);
 
@@ -36,22 +36,25 @@ export async function parseEpub(buffer, annotateFn) {
   const opfDir = opfPath.substring(0, opfPath.lastIndexOf('/') + 1);
   const { title, spine, manifest } = parseOpf(opfXml, opfDir);
 
-  // Read spine items in order, annotate, merge
+  // Read spine items in order (raw, unannotated — annotation happens per chapter at read time)
   const chapters = [];
   for (const href of spine) {
     const file = zip.file(href);
     if (!file) continue;
-    const html = await file.async('string');
-    chapters.push(annotateFn(html));
+    chapters.push(await file.async('string'));
   }
 
-  const content = chapters.join('\n');
+  return { title, chapters };
+}
 
-  return {
-    title,
-    content: `<div class="epub-content">${content}</div>`,
-    rawContent: buffer,
-  };
+/**
+ * Coerce a stored rawContent (ArrayBuffer or Uint8Array, as structured clone
+ * may return either) into a plain ArrayBuffer.
+ * @param {ArrayBuffer|Uint8Array} buffer
+ * @returns {ArrayBuffer}
+ */
+export function normalizeBuffer(buffer) {
+  return buffer instanceof ArrayBuffer ? buffer : new Uint8Array(buffer).buffer;
 }
 
 /**

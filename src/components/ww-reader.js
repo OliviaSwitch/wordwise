@@ -7,9 +7,9 @@
  * CEFR level adjustable in toolbar.
  */
 
-import { getDocument, getProficiencyLevel, setProficiencyLevel, getBlacklist, setBlacklist, getWhitelist, setWhitelist } from '../lib/storage.js';
+import { getDocument, getProficiencyLevel, setProficiencyLevel, getBlacklist, setBlacklist, getWhitelist, setWhitelist, saveDocument } from '../lib/storage.js';
 import { annotateHtml, initGloss } from '../lib/annotator.js';
-import { exportEpub } from '../lib/epub.js';
+import { exportEpub, parseEpub, normalizeBuffer } from '../lib/epub.js';
 import { downloadFile, downloadBlob, toast, escapeHtml } from '../lib/utils.js';
 import { CEFR_LEVELS } from '../lib/gloss-engine.js';
 
@@ -23,6 +23,11 @@ template.innerHTML = `
         <select id="level-select">
           ${CEFR_LEVELS.map(l => `<option value="${l}">${l}</option>`).join('')}
         </select>
+      </div>
+      <div class="chapter-nav" id="chapter-nav" hidden>
+        <button id="prev-chapter" class="btn">←</button>
+        <span id="chapter-indicator">1 / 1</span>
+        <button id="next-chapter" class="btn">→</button>
       </div>
       <button id="export-btn" class="btn">Export</button>
     </div>
@@ -45,6 +50,10 @@ export class WwReader extends HTMLElement {
   #blacklist = [];
   /** @type {string[]} */
   #whitelist = [];
+  /** @type {string[]} */
+  #chapters = [];
+  /** @type {number} */
+  #chapterIndex = 0;
 
   constructor() {
     super();
@@ -56,11 +65,14 @@ export class WwReader extends HTMLElement {
     this.shadowRoot.querySelector('#back-btn').addEventListener('click', () => this.#goBack());
     this.shadowRoot.querySelector('#level-select').addEventListener('change', (e) => this.#onLevelChange(e));
     this.shadowRoot.querySelector('#export-btn').addEventListener('click', () => this.#export());
+    this.shadowRoot.querySelector('#prev-chapter').addEventListener('click', () => this.#goToChapter(this.#chapterIndex - 1));
+    this.shadowRoot.querySelector('#next-chapter').addEventListener('click', () => this.#goToChapter(this.#chapterIndex + 1));
   }
 
   /** @param {number} docId */
   async load(docId) {
     this.#docId = docId;
+    this.#chapterIndex = 0;
     this.#showLoading(true);
     this.shadowRoot.querySelector('#reader-content').innerHTML = '';
 
@@ -77,12 +89,38 @@ export class WwReader extends HTMLElement {
       this.#whitelist = await getWhitelist();
 
       this.shadowRoot.querySelector('#level-select').value = this.#level;
+
+      if (this.#doc.type === 'epub') {
+        await this.#ensureChapters();
+      }
+
       this.#render();
       this.#showLoading(false);
     } catch (err) {
       this.#showLoading(false);
       toast('Failed to load document: ' + err.message, 'error');
       console.error(err);
+    }
+  }
+
+  /**
+   * Ensure an EPUB document has raw chapters. New docs have them; legacy docs
+   * (stored before chapters existed) are rebuilt once from rawContent.
+   */
+  async #ensureChapters() {
+    if (Array.isArray(this.#doc.chapters)) {
+      this.#chapters = this.#doc.chapters;
+      return;
+    }
+    if (!this.#doc.rawContent) return;
+
+    try {
+      const { chapters } = await parseEpub(normalizeBuffer(this.#doc.rawContent));
+      this.#doc.chapters = chapters;
+      this.#chapters = chapters;
+      await saveDocument(this.#doc);
+    } catch (err) {
+      console.warn('[reader] Failed to rebuild chapters from rawContent:', err);
     }
   }
 
@@ -93,12 +131,14 @@ export class WwReader extends HTMLElement {
   async #render() {
     const container = this.shadowRoot.querySelector('#reader-content');
 
+    if (this.#doc.type === 'epub') {
+      this.#renderChapter();
+      return;
+    }
+
     // Re-annotate based on current level + blacklist + whitelist.
     // For text & HTML documents, rawContent is the original plain text/HTML
     // (a string) — use it directly so structure is preserved.
-    // For EPUB documents, rawContent is the original ArrayBuffer (kept for
-    // re-export); we re-annotate from the stored annotated content instead,
-    // extracting plain English text out of it first.
     let rawContent;
     if (typeof this.#doc.rawContent === 'string') {
       rawContent = this.#doc.rawContent;
@@ -112,6 +152,42 @@ export class WwReader extends HTMLElement {
 
     // Setup click handlers for word interaction
     container.addEventListener('click', (e) => this.#onWordClick(e));
+  }
+
+  /** Render and annotate only the current chapter (EPUB docs). */
+  async #renderChapter() {
+    const container = this.shadowRoot.querySelector('#reader-content');
+    const chapterNav = this.shadowRoot.querySelector('#chapter-nav');
+
+    if (this.#chapters.length === 0) {
+      // Legacy fallback: no rebuildable chapters — show flattened legacy content
+      chapterNav.hidden = true;
+      container.innerHTML = annotateHtml(
+        this.#extractTextFromAnnotated(this.#doc.content || ''),
+        this.#level, this.#blacklist, this.#whitelist
+      );
+      container.addEventListener('click', (e) => this.#onWordClick(e));
+      return;
+    }
+
+    const index = Math.min(Math.max(this.#chapterIndex, 0), this.#chapters.length - 1);
+    this.#chapterIndex = index;
+
+    await initGloss();
+    const annotated = annotateHtml(this.#chapters[index], this.#level, this.#blacklist, this.#whitelist);
+    container.innerHTML = annotated;
+
+    container.addEventListener('click', (e) => this.#onWordClick(e));
+
+    this.shadowRoot.querySelector('#chapter-indicator').textContent = `${index + 1} / ${this.#chapters.length}`;
+    this.shadowRoot.querySelector('#prev-chapter').disabled = index <= 0;
+    this.shadowRoot.querySelector('#next-chapter').disabled = index >= this.#chapters.length - 1;
+    chapterNav.hidden = false;
+  }
+
+  #goToChapter(index) {
+    this.#chapterIndex = index;
+    this.#renderChapter();
   }
 
   #extractTextFromAnnotated(html) {
@@ -191,11 +267,7 @@ export class WwReader extends HTMLElement {
 
       if (this.#doc.type === 'epub' && this.#doc.rawContent) {
         // Re-export EPUB with current annotations
-        const buffer = this.#doc.rawContent instanceof ArrayBuffer
-          ? this.#doc.rawContent
-          : new Uint8Array(this.#doc.rawContent).buffer;
-
-        const blob = await exportEpub(buffer, (html) => {
+        const blob = await exportEpub(normalizeBuffer(this.#doc.rawContent), (html) => {
           return annotateHtml(html, this.#level, this.#blacklist, this.#whitelist);
         });
         downloadBlob(blob, this.#doc.title.replace(/[^a-zA-Z0-9_\-]/g, '_') + '_annotated.epub');
