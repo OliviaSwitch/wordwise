@@ -30,9 +30,12 @@ template.innerHTML = `
         <span id="chapter-indicator">1 / 1</span>
         <button id="next-chapter" class="btn">→</button>
       </div>
-      <button id="export-btn" class="btn">Export</button>
+      <button id="export-btn" class="btn" data-copy-label="Copy" hidden>Copy</button>
     </div>
-    <div id="reader-content" class="reader-content"></div>
+    <div class="reader-panes" id="reader-panes">
+      <div id="reader-content" class="reader-content"></div>
+      <pre id="raw-panel" class="raw-panel" hidden></pre>
+    </div>
     <div id="reader-loading" class="loading">
       <div class="spinner"></div>
       <span>Loading...</span>
@@ -95,6 +98,13 @@ export class WwReader extends HTMLElement {
         await this.#ensureChapters();
       }
 
+      // Plain-text docs export by copying the ruby fragment; others download a file.
+      const exportBtn = this.shadowRoot.querySelector('#export-btn');
+      exportBtn.hidden = false;
+      exportBtn.textContent = this.#doc.type === 'text'
+        ? (exportBtn.dataset.copyLabel || 'Copy')
+        : 'Export';
+
       this.#render();
       this.#showLoading(false);
     } catch (err) {
@@ -149,7 +159,19 @@ export class WwReader extends HTMLElement {
 
     await initGloss();
     const annotated = annotateHtml(rawContent, this.#level, this.#blacklist, this.#whitelist);
-    container.innerHTML = annotated;
+
+    const rawPanel = this.shadowRoot.querySelector('#raw-panel');
+    if (this.#doc.type === 'text') {
+      // Plain text: show the rendered ruby alongside the literal markup so the
+      // `<ruby>/<rt>` tags are visible for comparison. textContent displays the
+      // tags verbatim.
+      container.innerHTML = annotated;
+      rawPanel.textContent = annotated;
+      rawPanel.hidden = false;
+    } else {
+      container.innerHTML = annotated;
+      rawPanel.hidden = true;
+    }
 
     // Setup click handlers for word interaction
     container.addEventListener('click', (e) => this.#onWordClick(e));
@@ -159,6 +181,8 @@ export class WwReader extends HTMLElement {
   async #renderChapter() {
     const container = this.shadowRoot.querySelector('#reader-content');
     const chapterNav = this.shadowRoot.querySelector('#chapter-nav');
+    const rawPanel = this.shadowRoot.querySelector('#raw-panel');
+    rawPanel.hidden = true;
 
     if (this.#chapters.length === 0) {
       // Legacy fallback: no rebuildable chapters — show flattened legacy content
@@ -265,6 +289,21 @@ export class WwReader extends HTMLElement {
 
     try {
       await initGloss();
+
+      if (this.#doc.type === 'text') {
+        // Plain text: copy only the ruby-annotated fragment (no full HTML document).
+        const rawContent = this.#doc.rawContent && typeof this.#doc.rawContent === 'string'
+          ? this.#doc.rawContent
+          : this.#extractTextFromAnnotated(this.#doc.content);
+        const annotated = annotateHtml(rawContent, this.#level, this.#blacklist, this.#whitelist);
+        try {
+          await navigator.clipboard.writeText(annotated);
+          toast('Copied to clipboard', 'success');
+        } catch (err) {
+          toast('Copy failed: ' + err.message, 'error');
+        }
+        return;
+      }
 
       if (this.#doc.type === 'epub' && this.#doc.rawContent) {
         // Re-export EPUB with current annotations
