@@ -10,7 +10,7 @@
 
 import { getDocument, getProficiencyLevel, setProficiencyLevel, getBlacklist, setBlacklist, getWhitelist, setWhitelist, saveDocument } from '../lib/storage.js';
 import { annotateHtml, initGloss } from '../lib/annotator.js';
-import { exportEpub, parseEpub, normalizeBuffer, formatChapterFilename } from '../lib/epub.js';
+import { exportEpub, parseEpub, normalizeBuffer } from '../lib/epub.js';
 import { downloadFile, downloadBlob, toast, escapeHtml } from '../lib/utils.js';
 import { CEFR_LEVELS } from '../lib/gloss-engine.js';
 
@@ -126,16 +126,27 @@ export class WwReader extends HTMLElement {
   }
 
   /**
-   * Ensure an EPUB document has raw chapters. New docs have them; legacy docs
-   * (stored before chapters existed) are rebuilt once from rawContent.
+   * Ensure an EPUB document has raw chapters and their file names.
+   * New docs have both; docs imported before file names existed (or before
+   * chapters existed) are rebuilt once from rawContent.
    */
   async #ensureChapters() {
-    if (Array.isArray(this.#doc.chapters)) {
+    const chaptersOk = Array.isArray(this.#doc.chapters);
+    const fileNamesOk = chaptersOk
+      && Array.isArray(this.#doc.fileNames)
+      && this.#doc.fileNames.length === this.#doc.chapters.length;
+
+    if (chaptersOk && fileNamesOk) {
       this.#chapters = this.#doc.chapters;
-      this.#fileNames = Array.isArray(this.#doc.fileNames) ? this.#doc.fileNames : [];
+      this.#fileNames = this.#doc.fileNames;
       return;
     }
-    if (!this.#doc.rawContent) return;
+
+    // No raw source to rebuild from — keep whatever chapters we have.
+    if (!this.#doc.rawContent) {
+      this.#chapters = chaptersOk ? this.#doc.chapters : [];
+      return;
+    }
 
     try {
       const { chapters, fileNames } = await parseEpub(normalizeBuffer(this.#doc.rawContent));
@@ -145,6 +156,8 @@ export class WwReader extends HTMLElement {
       this.#fileNames = fileNames;
       await saveDocument(this.#doc);
     } catch (err) {
+      // Rebuild failed — fall back to stored chapters if any.
+      if (chaptersOk) this.#chapters = this.#doc.chapters;
       console.warn('[reader] Failed to rebuild chapters from rawContent:', err);
     }
   }
@@ -170,7 +183,7 @@ export class WwReader extends HTMLElement {
       const button = document.createElement('button');
       button.type = 'button';
       const name = this.#fileNames[i];
-      button.textContent = name ? formatChapterFilename(name, i) : `Chapter ${i + 1}`;
+      button.textContent = name || `Chapter ${i + 1}`;
       button.title = name || button.textContent;
       button.classList.toggle('active', i === this.#chapterIndex);
       button.addEventListener('click', () => this.#goToChapter(i));

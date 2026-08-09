@@ -143,16 +143,3 @@ function parseOpf(xml, opfDir) {
 
   return { title, spine, manifest };
 }
-
-/**
- * Derive a TOC label from a chapter's href — file name only, extension
- * stripped, underscores/dashes converted to spaces. No heading extraction.
- * @param {string} href
- * @param {number} index
- * @returns {string}
- */
-export function formatChapterFilename(href, index) {
-  const file = href.substring(href.lastIndexOf('/') + 1);
-  const base = file.replace(/\.(x?html?|xml|xht)$/i, '');
-  return base.replace(/[_-]+/g, ' ').trim() || `Chapter ${index + 1}`;
-}
