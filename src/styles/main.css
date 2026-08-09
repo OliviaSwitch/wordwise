@@ -278,6 +278,80 @@ button:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   grid-template-columns: 1fr;
 }
 
+/* ── Reader layout (EPUB table-of-contents sidebar) ── */
+.reader-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+/* `display: flex` above overrides the hidden attribute's default, so re-hide explicitly. */
+.reader-layout .toc-panel[hidden] {
+  display: none;
+}
+
+.toc-panel {
+  flex: 0 0 220px;
+  width: 220px;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  position: sticky;
+  top: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.toc-panel .toc-header {
+  padding: 10px 12px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--color-text-secondary);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.toc-panel .toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.toc-panel .toc-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  color: var(--color-text);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toc-panel .toc-list button:hover {
+  background: var(--color-bg);
+}
+
+.toc-panel .toc-list button.active {
+  background: #eff6ff;
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+/* The panes take the remaining width next to the TOC sidebar. */
+.reader-layout .reader-panes {
+  flex: 1;
+  min-width: 0;
+}
+
 /* ── Ruby annotations ── */
 .reader-content ruby {
   cursor: pointer;
@@ -498,4 +572,6 @@ button:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .input-methods { grid-template-columns: 1fr; }
   .page-header { flex-direction: column; align-items: flex-start; gap: 12px; }
   .reader-panes { grid-template-columns: 1fr; }
+  .reader-layout { flex-direction: column; }
+  .toc-panel { flex-basis: auto; width: 100%; max-height: 220px; position: static; }
 }

@@ -130,6 +130,7 @@ export async function setWhitelist(words) {
  * @property {'text'|'epub'|'html'} type
  * @property {string} content — HTML content for reading (text/html docs)
  * @property {string[]} [chapters] — raw per-chapter HTML (epub docs; annotated on read)
+ * @property {string[]} [fileNames] — per-chapter file names (epub docs; shown in the TOC)
  * @property {string|ArrayBuffer} [rawContent] — original uploaded content (for EPUB re-export)
  * @property {number} createdAt
  * @property {number} updatedAt

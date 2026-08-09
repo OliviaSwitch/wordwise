@@ -21,7 +21,7 @@ function getJSZip() {
 /**
  * Parse an EPUB ArrayBuffer into its raw chapters.
  * @param {ArrayBuffer} buffer
- * @returns {Promise<{title: string, chapters: string[]}>}
+ * @returns {Promise<{title: string, chapters: string[], fileNames: string[]}>}
  */
 export async function parseEpub(buffer) {
   const JSZip = getJSZip();
@@ -36,15 +36,18 @@ export async function parseEpub(buffer) {
   const opfDir = opfPath.substring(0, opfPath.lastIndexOf('/') + 1);
   const { title, spine, manifest } = parseOpf(opfXml, opfDir);
 
-  // Read spine items in order (raw, unannotated — annotation happens per chapter at read time)
+  // Read spine items in order (raw, unannotated — annotation happens per chapter at read time).
+  // Track the file name of each spine item so the reader can list them in its TOC.
   const chapters = [];
+  const fileNames = [];
   for (const href of spine) {
     const file = zip.file(href);
     if (!file) continue;
     chapters.push(await file.async('string'));
+    fileNames.push(href.substring(href.lastIndexOf('/') + 1));
   }
 
-  return { title, chapters };
+  return { title, chapters, fileNames };
 }
 
 /**
@@ -139,4 +142,17 @@ function parseOpf(xml, opfDir) {
   }
 
   return { title, spine, manifest };
+}
+
+/**
+ * Derive a TOC label from a chapter's href — file name only, extension
+ * stripped, underscores/dashes converted to spaces. No heading extraction.
+ * @param {string} href
+ * @param {number} index
+ * @returns {string}
+ */
+export function formatChapterFilename(href, index) {
+  const file = href.substring(href.lastIndexOf('/') + 1);
+  const base = file.replace(/\.(x?html?|xml|xht)$/i, '');
+  return base.replace(/[_-]+/g, ' ').trim() || `Chapter ${index + 1}`;
 }

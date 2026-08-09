@@ -10,7 +10,7 @@
 
 import { getDocument, getProficiencyLevel, setProficiencyLevel, getBlacklist, setBlacklist, getWhitelist, setWhitelist, saveDocument } from '../lib/storage.js';
 import { annotateHtml, initGloss } from '../lib/annotator.js';
-import { exportEpub, parseEpub, normalizeBuffer } from '../lib/epub.js';
+import { exportEpub, parseEpub, normalizeBuffer, formatChapterFilename } from '../lib/epub.js';
 import { downloadFile, downloadBlob, toast, escapeHtml } from '../lib/utils.js';
 import { CEFR_LEVELS } from '../lib/gloss-engine.js';
 
@@ -33,9 +33,12 @@ template.innerHTML = `
       </div>
       <button id="export-btn" class="btn" data-copy-label="Copy" hidden>Copy</button>
     </div>
-    <div class="reader-panes" id="reader-panes">
-      <div id="reader-content" class="reader-content"></div>
-      <pre id="raw-panel" class="raw-panel" hidden></pre>
+    <div class="reader-layout" id="reader-layout">
+      <nav class="toc-panel" id="toc-panel" hidden></nav>
+      <div class="reader-panes" id="reader-panes">
+        <div id="reader-content" class="reader-content"></div>
+        <pre id="raw-panel" class="raw-panel" hidden></pre>
+      </div>
     </div>
     <div id="reader-loading" class="loading">
       <div class="spinner"></div>
@@ -57,6 +60,8 @@ export class WwReader extends HTMLElement {
   #whitelist = [];
   /** @type {string[]} */
   #chapters = [];
+  /** @type {string[]} */
+  #fileNames = [];
   /** @type {number} */
   #chapterIndex = 0;
 
@@ -78,6 +83,7 @@ export class WwReader extends HTMLElement {
   async load(docId) {
     this.#docId = docId;
     this.#chapterIndex = 0;
+    this.#fileNames = [];
     this.#showLoading(true);
     this.shadowRoot.querySelector('#reader-content').innerHTML = '';
 
@@ -97,6 +103,10 @@ export class WwReader extends HTMLElement {
 
       if (this.#doc.type === 'epub') {
         await this.#ensureChapters();
+        this.#buildToc();
+      } else {
+        // Only EPUB docs get a table-of-contents sidebar.
+        this.shadowRoot.querySelector('#toc-panel').hidden = true;
       }
 
       // Plain-text docs export by copying the ruby fragment; others download a file.
@@ -122,18 +132,60 @@ export class WwReader extends HTMLElement {
   async #ensureChapters() {
     if (Array.isArray(this.#doc.chapters)) {
       this.#chapters = this.#doc.chapters;
+      this.#fileNames = Array.isArray(this.#doc.fileNames) ? this.#doc.fileNames : [];
       return;
     }
     if (!this.#doc.rawContent) return;
 
     try {
-      const { chapters } = await parseEpub(normalizeBuffer(this.#doc.rawContent));
+      const { chapters, fileNames } = await parseEpub(normalizeBuffer(this.#doc.rawContent));
       this.#doc.chapters = chapters;
+      this.#doc.fileNames = fileNames;
       this.#chapters = chapters;
+      this.#fileNames = fileNames;
       await saveDocument(this.#doc);
     } catch (err) {
       console.warn('[reader] Failed to rebuild chapters from rawContent:', err);
     }
+  }
+
+  /** Build the sidebar table of contents from chapter file names. */
+  #buildToc() {
+    const panel = this.shadowRoot.querySelector('#toc-panel');
+    if (!this.#chapters.length) {
+      panel.hidden = true;
+      return;
+    }
+
+    panel.innerHTML = '';
+    const header = document.createElement('div');
+    header.className = 'toc-header';
+    header.textContent = '目录';
+    panel.appendChild(header);
+
+    const list = document.createElement('ul');
+    list.className = 'toc-list';
+    this.#chapters.forEach((_, i) => {
+      const item = document.createElement('li');
+      const button = document.createElement('button');
+      button.type = 'button';
+      const name = this.#fileNames[i];
+      button.textContent = name ? formatChapterFilename(name, i) : `Chapter ${i + 1}`;
+      button.title = name || button.textContent;
+      button.classList.toggle('active', i === this.#chapterIndex);
+      button.addEventListener('click', () => this.#goToChapter(i));
+      item.appendChild(button);
+      list.appendChild(item);
+    });
+    panel.appendChild(list);
+    panel.hidden = false;
+  }
+
+  /** Highlight the entry matching the currently rendered chapter. */
+  #updateTocActive(index) {
+    this.shadowRoot.querySelectorAll('#toc-panel .toc-list button').forEach((btn, i) => {
+      btn.classList.toggle('active', i === index);
+    });
   }
 
   #showLoading(show) {
@@ -209,6 +261,7 @@ export class WwReader extends HTMLElement {
     this.shadowRoot.querySelector('#prev-chapter').disabled = index <= 0;
     this.shadowRoot.querySelector('#next-chapter').disabled = index >= this.#chapters.length - 1;
     chapterNav.hidden = false;
+    this.#updateTocActive(index);
   }
 
   #goToChapter(index) {

@@ -176,12 +176,13 @@ export class WwShelf extends HTMLElement {
 
     try {
       const buffer = await file.arrayBuffer();
-      const { title, chapters } = await parseEpub(buffer);
+      const { title, chapters, fileNames } = await parseEpub(buffer);
 
       const doc = {
         title: title || file.name.replace(/\.epub$/i, ''),
         type: 'epub',
         chapters,
+        fileNames,
         rawContent: buffer,
       };
 
