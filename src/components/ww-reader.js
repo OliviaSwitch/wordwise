@@ -3,7 +3,8 @@
  *
  * Displays annotated document content.
  * Click a ruby-annotated word → add to Blacklist (re-annotate)
- * Click an unannotated word → add to Whitelist (re-annotate)
+ * Click a whitelisted word badge → remove from Whitelist (re-annotate)
+ * Blacklisted words render as plain text, with no wrapper or styling.
  * CEFR level adjustable in toolbar.
  */
 

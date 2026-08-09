@@ -236,8 +236,9 @@ function renderAnnotations(plans) {
       return escapeHtml(p.token);
     }
     if (!p.annotated || !p.gloss) {
-      // Still show as clickable badge for blacklist/whitelist interaction
-      const cls = p.blacklisted ? 'word-badge blacklisted' : p.whitelisted ? 'word-badge whitelisted' : '';
+      // Whitelisted words keep a clickable badge for toggle interaction;
+      // blacklisted words render as plain text with no wrapper or styling.
+      const cls = p.whitelisted ? 'word-badge whitelisted' : '';
       return cls
         ? `<span class="${cls}" data-word="${escapeHtml(p.token.toLowerCase())}">${escapeHtml(p.token)}</span>`
         : escapeHtml(p.token);
