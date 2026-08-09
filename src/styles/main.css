@@ -272,6 +272,12 @@ button:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   display: none;
 }
 
+/* EPUB/HTML docs hide the raw markup panel; collapse to a single column so the
+   right side isn't an empty reserved grid track. */
+.reader-panes:has(.raw-panel[hidden]) {
+  grid-template-columns: 1fr;
+}
+
 /* ── Ruby annotations ── */
 .reader-content ruby {
   cursor: pointer;
