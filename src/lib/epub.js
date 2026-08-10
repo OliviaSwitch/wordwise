@@ -78,15 +78,15 @@ export async function exportEpub(originalBuffer, annotateFn, customCss = '') {
   const opfXml = await zip.file(opfPath).async('string');
   const { spine, manifest } = parseOpf(opfXml, opfDir);
 
-  // External user stylesheet: write styles/user.css, register it in the
+  // External user stylesheet: write styles/word-wise.css, register it in the
   // manifest, and link it from every chapter head.
-  const userCssPath = opfDir + 'styles/user.css';
+  const userCssPath = opfDir + 'styles/word-wise.css';
   if (customCss.trim()) {
     zip.file(userCssPath, customCss);
     if (!/<\/manifest>/i.test(opfXml)) {
       throw new Error('Cannot find </manifest> in OPF to register user stylesheet.');
     }
-    const item = `<item id="user-css" href="styles/user.css" media-type="text/css"/>`;
+    const item = `<item id="word-wise-css" href="styles/word-wise.css" media-type="text/css"/>`;
     zip.file(opfPath, opfXml.replace(/<\/manifest>/i, () => `    ${item}\n  </manifest>`));
   }
 
@@ -114,7 +114,7 @@ function dirname(path) {
 
 /**
  * Relative path from a directory to a target path, e.g.
- * relativePath('OEBPS/chapters', 'OEBPS/styles/user.css') → '../styles/user.css'.
+ * relativePath('OEBPS/chapters', 'OEBPS/styles/word-wise.css') → '../styles/word-wise.css'.
  * @param {string} fromDir
  * @param {string} toPath
  * @returns {string}
