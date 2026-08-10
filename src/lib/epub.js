@@ -64,9 +64,10 @@ export function normalizeBuffer(buffer) {
  * Re-export an EPUB with annotated content.
  * @param {ArrayBuffer} originalBuffer
  * @param {(html: string) => string} annotateFn
+ * @param {string} [customCss] — user CSS embedded as an external stylesheet
  * @returns {Promise<Blob>}
  */
-export async function exportEpub(originalBuffer, annotateFn) {
+export async function exportEpub(originalBuffer, annotateFn, customCss = '') {
   const JSZip = getJSZip();
   const zip = await JSZip.loadAsync(originalBuffer);
 
@@ -77,17 +78,72 @@ export async function exportEpub(originalBuffer, annotateFn) {
   const opfXml = await zip.file(opfPath).async('string');
   const { spine, manifest } = parseOpf(opfXml, opfDir);
 
+  // External user stylesheet: write styles/user.css, register it in the
+  // manifest, and link it from every chapter head.
+  const userCssPath = opfDir + 'styles/user.css';
+  if (customCss.trim()) {
+    zip.file(userCssPath, customCss);
+    if (!/<\/manifest>/i.test(opfXml)) {
+      throw new Error('Cannot find </manifest> in OPF to register user stylesheet.');
+    }
+    const item = `<item id="user-css" href="styles/user.css" media-type="text/css"/>`;
+    zip.file(opfPath, opfXml.replace(/<\/manifest>/i, () => `    ${item}\n  </manifest>`));
+  }
+
   // Re-annotate each spine item and replace in zip
   for (const href of spine) {
     const file = zip.file(href);
     if (!file) continue;
     const html = await file.async('string');
-    const annotated = annotateFn(html);
+    let annotated = annotateFn(html);
+    if (customCss.trim()) {
+      annotated = addCssLink(annotated, relativePath(dirname(href), userCssPath));
+    }
     zip.file(href, annotated);
   }
 
   const blob = await zip.generateAsync({ type: 'blob' });
   return blob;
+}
+
+/** Directory portion of a path ('' when there is none). */
+function dirname(path) {
+  const i = path.lastIndexOf('/');
+  return i >= 0 ? path.substring(0, i) : '';
+}
+
+/**
+ * Relative path from a directory to a target path, e.g.
+ * relativePath('OEBPS/chapters', 'OEBPS/styles/user.css') → '../styles/user.css'.
+ * @param {string} fromDir
+ * @param {string} toPath
+ * @returns {string}
+ */
+function relativePath(fromDir, toPath) {
+  const fromParts = fromDir ? fromDir.split('/') : [];
+  const toParts = toPath.split('/');
+
+  // Drop the common prefix.
+  let i = 0;
+  while (i < fromParts.length && i < toParts.length && fromParts[i] === toParts[i]) i++;
+  const up = fromParts.length - i;
+  const down = toParts.slice(i);
+  return (up > 0 ? '../'.repeat(up) : '') + down.join('/');
+}
+
+/**
+ * Insert a stylesheet <link> into a chapter's <head>.
+ * Falls back to prepending before the first element when no head exists.
+ * @param {string} html
+ * @param {string} href — relative path to the stylesheet
+ * @returns {string}
+ */
+function addCssLink(html, href) {
+  const link = `<link rel="stylesheet" type="text/css" href="${href}"/>`;
+  if (/<\/head>/i.test(html)) {
+    return html.replace(/<\/head>/i, () => link + '\n</head>');
+  }
+  return link + '\n' + html;
 }
 
 /**

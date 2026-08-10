@@ -491,6 +491,35 @@ button:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   flex-wrap: wrap;
 }
 
+/* ── Custom CSS editor ── */
+.css-editor {
+  width: 100%;
+  min-height: 200px;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  resize: vertical;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.css-editor:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+}
+
+.css-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
 /* ── Toast notifications ── */
 .toast-container {
   position: fixed;

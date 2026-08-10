@@ -86,6 +86,7 @@ const SETTINGS = {
   PROFICIENCY_LEVEL: 'proficiencyLevel',
   BLACKLIST: 'blacklist',
   WHITELIST: 'whitelist',
+  CUSTOM_CSS: 'customCss',
 };
 
 /** @returns {Promise<string>} */
@@ -119,6 +120,17 @@ export async function getWhitelist() {
 /** @param {string[]} words */
 export async function setWhitelist(words) {
   await put('settings', { key: SETTINGS.WHITELIST, value: [...new Set(words)] });
+}
+
+/** @returns {Promise<string>} */
+export async function getCustomCss() {
+  const entry = await get('settings', SETTINGS.CUSTOM_CSS);
+  return entry?.value ?? '';
+}
+
+/** @param {string} css */
+export async function setCustomCss(css) {
+  await put('settings', { key: SETTINGS.CUSTOM_CSS, value: css });
 }
 
 // ── Documents ──
@@ -169,21 +181,23 @@ export async function deleteDocument(id) {
 
 /**
  * Export config as a downloadable JSON object.
- * @returns {Promise<{level: string, blacklist: string[], whitelist: string[]}>}
+ * @returns {Promise<{level: string, blacklist: string[], whitelist: string[], customCss: string}>}
  */
 export async function exportConfig() {
   const level = await getProficiencyLevel();
   const blacklist = await getBlacklist();
   const whitelist = await getWhitelist();
-  return { level, blacklist, whitelist };
+  const customCss = await getCustomCss();
+  return { level, blacklist, whitelist, customCss };
 }
 
 /**
  * Import a config JSON object (overwrites current settings).
- * @param {{level: string, blacklist: string[], whitelist: string[]}} config
+ * @param {{level: string, blacklist: string[], whitelist: string[], customCss?: string}} config
  */
 export async function importConfig(config) {
   await setProficiencyLevel(config.level);
   await setBlacklist(config.blacklist ?? []);
   await setWhitelist(config.whitelist ?? []);
+  await setCustomCss(config.customCss ?? '');
 }

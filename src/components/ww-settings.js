@@ -7,7 +7,7 @@
  * - Config import/export
  */
 
-import { getProficiencyLevel, setProficiencyLevel, getBlacklist, setBlacklist, getWhitelist, setWhitelist, exportConfig, importConfig } from '../lib/storage.js';
+import { getProficiencyLevel, setProficiencyLevel, getBlacklist, setBlacklist, getWhitelist, setWhitelist, getCustomCss, setCustomCss, exportConfig, importConfig } from '../lib/storage.js';
 import { downloadFile, toast } from '../lib/utils.js';
 import { CEFR_LEVELS } from '../lib/gloss-engine.js';
 
@@ -65,11 +65,25 @@ template.innerHTML = `
       </div>
     </div>
 
+    <!-- Custom CSS -->
+    <div class="settings-section">
+      <h2>Custom CSS</h2>
+      <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-bottom:12px;">
+        Styles applied to the reading view and to exported documents. Plain text is copied with
+        inline styles, HTML embeds an internal stylesheet, EPUB gets an external stylesheet.
+      </p>
+      <textarea id="settings-css" class="css-editor" spellcheck="false"
+        placeholder="e.g. ruby rt { background:#fecaca; color:#7f1d1d; }"></textarea>
+      <div class="css-actions">
+        <button id="save-css-btn" class="btn primary">Save CSS</button>
+      </div>
+    </div>
+
     <!-- Config -->
     <div class="settings-section">
       <h2>Config</h2>
       <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-bottom:12px;">
-        Export or import your settings (level, blacklist, whitelist). Documents are not included.
+        Export or import your settings (level, blacklist, whitelist, custom CSS). Documents are not included.
       </p>
       <div class="config-actions">
         <button id="export-config-btn" class="btn">Export Config</button>
@@ -84,6 +98,7 @@ export class WwSettings extends HTMLElement {
   #level = 'B1';
   #blacklist = [];
   #whitelist = [];
+  #customCss = '';
 
   constructor() {
     super();
@@ -109,6 +124,15 @@ export class WwSettings extends HTMLElement {
       if (e.key === 'Enter') this.#addWord('whitelist');
     });
 
+    // Custom CSS
+    this.shadowRoot.querySelector('#save-css-btn').addEventListener('click', () => this.#saveCss());
+    this.shadowRoot.querySelector('#settings-css').addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        this.#saveCss();
+      }
+    });
+
     // Config
     this.shadowRoot.querySelector('#export-config-btn').addEventListener('click', () => this.#exportConfig());
     this.shadowRoot.querySelector('#import-config-btn').addEventListener('click', () => this.#selectConfigFile());
@@ -119,8 +143,10 @@ export class WwSettings extends HTMLElement {
     this.#level = await getProficiencyLevel();
     this.#blacklist = await getBlacklist();
     this.#whitelist = await getWhitelist();
+    this.#customCss = await getCustomCss();
 
     this.shadowRoot.querySelector('#settings-level').value = this.#level;
+    this.shadowRoot.querySelector('#settings-css').value = this.#customCss;
     this.#renderBlacklist();
     this.#renderWhitelist();
   }
@@ -201,6 +227,12 @@ export class WwSettings extends HTMLElement {
     this.#level = e.target.value;
     await setProficiencyLevel(this.#level);
     toast(`Level changed to ${this.#level}`, 'info');
+  }
+
+  async #saveCss() {
+    this.#customCss = this.shadowRoot.querySelector('#settings-css').value;
+    await setCustomCss(this.#customCss);
+    toast('Custom CSS saved', 'success');
   }
 
   async #exportConfig() {

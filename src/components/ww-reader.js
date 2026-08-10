@@ -8,8 +8,9 @@
  * CEFR level adjustable in toolbar.
  */
 
-import { getDocument, getProficiencyLevel, setProficiencyLevel, getBlacklist, setBlacklist, getWhitelist, setWhitelist, saveDocument } from '../lib/storage.js';
+import { getDocument, getProficiencyLevel, setProficiencyLevel, getBlacklist, setBlacklist, getWhitelist, setWhitelist, getCustomCss, saveDocument } from '../lib/storage.js';
 import { annotateHtml, initGloss } from '../lib/annotator.js';
+import { applyCssInline, embedInternalCss } from '../lib/css.js';
 import { exportEpub, parseEpub, normalizeBuffer } from '../lib/epub.js';
 import { downloadFile, downloadBlob, toast, escapeHtml } from '../lib/utils.js';
 import { CEFR_LEVELS } from '../lib/gloss-engine.js';
@@ -58,6 +59,8 @@ export class WwReader extends HTMLElement {
   #blacklist = [];
   /** @type {string[]} */
   #whitelist = [];
+  /** @type {string} */
+  #customCss = '';
   /** @type {string[]} */
   #chapters = [];
   /** @type {string[]} */
@@ -98,6 +101,7 @@ export class WwReader extends HTMLElement {
       this.#level = await getProficiencyLevel();
       this.#blacklist = await getBlacklist();
       this.#whitelist = await getWhitelist();
+      this.#customCss = await getCustomCss();
 
       this.shadowRoot.querySelector('#level-select').value = this.#level;
 
@@ -205,6 +209,17 @@ export class WwReader extends HTMLElement {
     this.shadowRoot.querySelector('#reader-loading').style.display = show ? 'flex' : 'none';
   }
 
+  /**
+   * Wrap annotated content with the user's custom CSS as an internal
+   * `<style>` for reading preview. Applies identically to all formats —
+   * per-format embedding only matters at export time.
+   * @param {string} annotated
+   * @returns {string}
+   */
+  #withPreviewCss(annotated) {
+    return this.#customCss ? `<style>${this.#customCss}</style>${annotated}` : annotated;
+  }
+
   async #render() {
     const container = this.shadowRoot.querySelector('#reader-content');
 
@@ -231,11 +246,11 @@ export class WwReader extends HTMLElement {
       // Plain text: show the rendered ruby alongside the literal markup so the
       // `<ruby>/<rt>` tags are visible for comparison. textContent displays the
       // tags verbatim.
-      container.innerHTML = annotated;
+      container.innerHTML = this.#withPreviewCss(annotated);
       rawPanel.textContent = annotated;
       rawPanel.hidden = false;
     } else {
-      container.innerHTML = annotated;
+      container.innerHTML = this.#withPreviewCss(annotated);
       rawPanel.hidden = true;
     }
 
@@ -253,10 +268,10 @@ export class WwReader extends HTMLElement {
     if (this.#chapters.length === 0) {
       // Legacy fallback: no rebuildable chapters — show flattened legacy content
       chapterNav.hidden = true;
-      container.innerHTML = annotateHtml(
+      container.innerHTML = this.#withPreviewCss(annotateHtml(
         this.#extractTextFromAnnotated(this.#doc.content || ''),
         this.#level, this.#blacklist, this.#whitelist
-      );
+      ));
       container.addEventListener('click', (e) => this.#onWordClick(e));
       return;
     }
@@ -266,7 +281,7 @@ export class WwReader extends HTMLElement {
 
     await initGloss();
     const annotated = annotateHtml(this.#chapters[index], this.#level, this.#blacklist, this.#whitelist);
-    container.innerHTML = annotated;
+    container.innerHTML = this.#withPreviewCss(annotated);
 
     container.addEventListener('click', (e) => this.#onWordClick(e));
 
@@ -359,10 +374,14 @@ export class WwReader extends HTMLElement {
 
       if (this.#doc.type === 'text') {
         // Plain text: copy only the ruby-annotated fragment (no full HTML document).
+        // Custom CSS is folded into inline styles so it travels with the fragment.
         const rawContent = this.#doc.rawContent && typeof this.#doc.rawContent === 'string'
           ? this.#doc.rawContent
           : this.#extractTextFromAnnotated(this.#doc.content);
-        const annotated = annotateHtml(rawContent, this.#level, this.#blacklist, this.#whitelist);
+        let annotated = annotateHtml(rawContent, this.#level, this.#blacklist, this.#whitelist);
+        if (this.#customCss) {
+          annotated = applyCssInline(annotated, this.#customCss);
+        }
         try {
           await navigator.clipboard.writeText(annotated);
           toast('Copied to clipboard', 'success');
@@ -373,10 +392,11 @@ export class WwReader extends HTMLElement {
       }
 
       if (this.#doc.type === 'epub' && this.#doc.rawContent) {
-        // Re-export EPUB with current annotations
+        // Re-export EPUB with current annotations and the custom CSS as an
+        // external stylesheet.
         const blob = await exportEpub(normalizeBuffer(this.#doc.rawContent), (html) => {
           return annotateHtml(html, this.#level, this.#blacklist, this.#whitelist);
-        });
+        }, this.#customCss);
         downloadBlob(blob, this.#doc.title.replace(/[^a-zA-Z0-9_\-]/g, '_') + '_annotated.epub');
         toast('EPUB exported', 'success');
       } else {
@@ -386,13 +406,20 @@ export class WwReader extends HTMLElement {
           : this.#extractTextFromAnnotated(this.#doc.content);
 
         if (this.#doc.type === 'html' && this.#doc.rawContent && typeof this.#doc.rawContent === 'string') {
-          // For HTML uploads, annotate the original HTML
-          const annotated = annotateHtml(rawContent, this.#level, this.#blacklist, this.#whitelist);
+          // For HTML uploads, annotate the original HTML and embed the custom
+          // CSS as an internal stylesheet.
+          let annotated = annotateHtml(rawContent, this.#level, this.#blacklist, this.#whitelist);
+          if (this.#customCss) {
+            annotated = embedInternalCss(annotated, this.#customCss);
+          }
           downloadFile(annotated, this.#doc.title.replace(/[^a-zA-Z0-9_\-]/g, '_') + '_annotated.html', 'text/html');
         } else {
           // For pasted text, wrap in clean HTML
           const annotated = annotateHtml(`<p>${escapeHtml(rawContent)}</p>`, this.#level, this.#blacklist, this.#whitelist);
-          const html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>${escapeHtml(this.#doc.title)}</title><style>body{max-width:700px;margin:2em auto;padding:0 1em;line-height:2;font-size:1.125rem}ruby{cursor:pointer}rt{font-size:0.65em;color:#92400e;background:#fef3c7;padding:1px 3px;border-radius:3px;user-select:none}</style></head><body>${annotated}</body></html>`;
+          let html = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>${escapeHtml(this.#doc.title)}</title><style>body{max-width:700px;margin:2em auto;padding:0 1em;line-height:2;font-size:1.125rem}ruby{cursor:pointer}rt{font-size:0.65em;color:#92400e;background:#fef3c7;padding:1px 3px;border-radius:3px;user-select:none}</style></head><body>${annotated}</body></html>`;
+          if (this.#customCss) {
+            html = embedInternalCss(html, this.#customCss);
+          }
           downloadFile(html, this.#doc.title.replace(/[^a-zA-Z0-9_\-]/g, '_') + '.html', 'text/html');
         }
         toast('HTML exported', 'success');
