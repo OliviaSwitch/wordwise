@@ -10,84 +10,86 @@
 import { getProficiencyLevel, setProficiencyLevel, getBlacklist, setBlacklist, getWhitelist, setWhitelist, getCustomCss, setCustomCss, exportConfig, importConfig } from '../lib/storage.js';
 import { downloadFile, toast } from '../lib/utils.js';
 import { CEFR_LEVELS } from '../lib/gloss-engine.js';
+import { applyI18n, t } from '../lib/i18n.js';
 
 const template = document.createElement('template');
 template.innerHTML = `
   <link rel="stylesheet" href="src/styles/main.css">
   <div>
     <div class="page-header">
-      <h1>Settings</h1>
+      <h1 data-i18n="settings.title">Settings</h1>
     </div>
 
     <!-- Proficiency Level -->
     <div class="settings-section">
-      <h2>Proficiency Level</h2>
+      <h2 data-i18n="settings.proficiency">Proficiency Level</h2>
       <div class="setting-row">
-        <label for="settings-level">Your CEFR Level</label>
+        <label for="settings-level" data-i18n="settings.yourLevel">Your CEFR Level</label>
         <select id="settings-level">
           ${CEFR_LEVELS.map(l => `<option value="${l}">${l}</option>`).join('')}
         </select>
       </div>
-      <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-top:8px;">
+      <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-top:8px;" data-i18n="settings.levelHint">
         Words above your level will be annotated with Chinese translations.
       </p>
     </div>
 
     <!-- Blacklist -->
     <div class="settings-section">
-      <h2>Blacklist</h2>
-      <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-bottom:12px;">
+      <h2 data-i18n="settings.blacklist">Blacklist</h2>
+      <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-bottom:12px;" data-i18n-html="settings.blacklistHint">
         Words you already know — they will <strong>not</strong> be annotated.
       </p>
       <div class="word-list-editor" id="blacklist-editor">
-        <input type="text" class="search-box" id="blacklist-search" placeholder="Search blacklist...">
+        <input type="text" class="search-box" id="blacklist-search" data-i18n-placeholder="settings.searchBlacklist" placeholder="Search blacklist...">
         <div class="word-list" id="blacklist-words"></div>
         <div class="add-word-form">
-          <input type="text" id="blacklist-add-input" placeholder="Add word...">
-          <button id="blacklist-add-btn" class="btn primary">Add</button>
+          <input type="text" id="blacklist-add-input" data-i18n-placeholder="settings.addWord" placeholder="Add word...">
+          <button id="blacklist-add-btn" class="btn primary" data-i18n="settings.add">Add</button>
         </div>
       </div>
     </div>
 
     <!-- Whitelist -->
     <div class="settings-section">
-      <h2>Whitelist</h2>
-      <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-bottom:12px;">
+      <h2 data-i18n="settings.whitelist">Whitelist</h2>
+      <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-bottom:12px;" data-i18n-html="settings.whitelistHint">
         Words you struggle with — they <strong>will</strong> be annotated even if below your level.
       </p>
       <div class="word-list-editor" id="whitelist-editor">
-        <input type="text" class="search-box" id="whitelist-search" placeholder="Search whitelist...">
+        <input type="text" class="search-box" id="whitelist-search" data-i18n-placeholder="settings.searchWhitelist" placeholder="Search whitelist...">
         <div class="word-list" id="whitelist-words"></div>
         <div class="add-word-form">
-          <input type="text" id="whitelist-add-input" placeholder="Add word...">
-          <button id="whitelist-add-btn" class="btn primary">Add</button>
+          <input type="text" id="whitelist-add-input" data-i18n-placeholder="settings.addWord" placeholder="Add word...">
+          <button id="whitelist-add-btn" class="btn primary" data-i18n="settings.add">Add</button>
         </div>
       </div>
     </div>
 
     <!-- Custom CSS -->
     <div class="settings-section">
-      <h2>Custom CSS</h2>
-      <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-bottom:12px;">
+      <h2 data-i18n="settings.customCss">Custom CSS</h2>
+      <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-bottom:12px;" data-i18n="settings.customCssHint">
         Styles applied to the reading view and to exported documents. Plain text is copied with
         inline styles, HTML embeds an internal stylesheet, EPUB gets an external stylesheet.
       </p>
       <textarea id="settings-css" class="css-editor" spellcheck="false"
+        data-i18n-placeholder="settings.customCssPlaceholder"
         placeholder="e.g. ruby rt { background:#fecaca; color:#7f1d1d; }"></textarea>
       <div class="css-actions">
-        <button id="save-css-btn" class="btn primary">Save CSS</button>
+        <button id="save-css-btn" class="btn primary" data-i18n="settings.saveCss">Save CSS</button>
       </div>
     </div>
 
     <!-- Config -->
     <div class="settings-section">
-      <h2>Config</h2>
-      <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-bottom:12px;">
+      <h2 data-i18n="settings.config">Config</h2>
+      <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-bottom:12px;" data-i18n="settings.configHint">
         Export or import your settings (level, blacklist, whitelist, custom CSS). Documents are not included.
       </p>
       <div class="config-actions">
-        <button id="export-config-btn" class="btn">Export Config</button>
-        <button id="import-config-btn" class="btn">Import Config</button>
+        <button id="export-config-btn" class="btn" data-i18n="settings.exportConfig">Export Config</button>
+        <button id="import-config-btn" class="btn" data-i18n="settings.importConfig">Import Config</button>
       </div>
       <input type="file" id="config-file-input" accept=".json" style="display:none">
     </div>
@@ -99,6 +101,8 @@ export class WwSettings extends HTMLElement {
   #blacklist = [];
   #whitelist = [];
   #customCss = '';
+  /** @type {(() => void)|null} */
+  #onLangChange = null;
 
   constructor() {
     super();
@@ -137,6 +141,21 @@ export class WwSettings extends HTMLElement {
     this.shadowRoot.querySelector('#export-config-btn').addEventListener('click', () => this.#exportConfig());
     this.shadowRoot.querySelector('#import-config-btn').addEventListener('click', () => this.#selectConfigFile());
     this.shadowRoot.querySelector('#config-file-input').addEventListener('change', (e) => this.#importConfig(e));
+
+    applyI18n(this.shadowRoot);
+    this.#onLangChange = () => {
+      applyI18n(this.shadowRoot);
+      this.#renderBlacklist();
+      this.#renderWhitelist();
+    };
+    document.addEventListener('ww:langchange', this.#onLangChange);
+  }
+
+  disconnectedCallback() {
+    if (this.#onLangChange) {
+      document.removeEventListener('ww:langchange', this.#onLangChange);
+      this.#onLangChange = null;
+    }
   }
 
   async #load() {
@@ -168,7 +187,7 @@ export class WwSettings extends HTMLElement {
     const filtered = query ? list.filter(w => w.includes(query)) : list;
 
     if (filtered.length === 0) {
-      container.innerHTML = '<span style="color:var(--color-text-secondary);font-size:0.85rem;padding:8px;">Empty</span>';
+      container.innerHTML = `<span style="color:var(--color-text-secondary);font-size:0.85rem;padding:8px;">${t('settings.empty')}</span>`;
       return;
     }
 
@@ -208,7 +227,8 @@ export class WwSettings extends HTMLElement {
     input.value = '';
     this.#renderBlacklist();
     this.#renderWhitelist();
-    toast(`"${word}" added to ${type}`, 'success');
+    const label = t(type === 'blacklist' ? 'settings.blacklistLabel' : 'settings.whitelistLabel');
+    toast(t('settings.wordAddedTo', { word, list: label }), 'success');
   }
 
   async #removeWord(type, word) {
@@ -226,20 +246,20 @@ export class WwSettings extends HTMLElement {
   async #onLevelChange(e) {
     this.#level = e.target.value;
     await setProficiencyLevel(this.#level);
-    toast(`Level changed to ${this.#level}`, 'info');
+    toast(t('reader.levelChanged', { level: this.#level }), 'info');
   }
 
   async #saveCss() {
     this.#customCss = this.shadowRoot.querySelector('#settings-css').value;
     await setCustomCss(this.#customCss);
-    toast('Custom CSS saved', 'success');
+    toast(t('settings.cssSaved'), 'success');
   }
 
   async #exportConfig() {
     const config = await exportConfig();
     const json = JSON.stringify(config, null, 2);
     downloadFile(json, 'wordwise-config.json', 'application/json');
-    toast('Config exported', 'success');
+    toast(t('settings.configExported'), 'success');
   }
 
   #selectConfigFile() {
@@ -260,9 +280,9 @@ export class WwSettings extends HTMLElement {
 
       await importConfig(config);
       await this.#load();
-      toast('Config imported', 'success');
+      toast(t('settings.configImported'), 'success');
     } catch (err) {
-      toast('Import failed: ' + err.message, 'error');
+      toast(t('settings.importFailed', { msg: err.message }), 'error');
     }
 
     e.target.value = '';

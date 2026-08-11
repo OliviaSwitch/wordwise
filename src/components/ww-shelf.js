@@ -11,6 +11,7 @@ import { getDocuments, saveDocument, deleteDocument, getProficiencyLevel } from 
 import { toast } from '../lib/utils.js';
 import { annotateHtml, initGloss } from '../lib/annotator.js';
 import { parseEpub } from '../lib/epub.js';
+import { applyI18n, getLang, t } from '../lib/i18n.js';
 
 const template = document.createElement('template');
 template.innerHTML = `
@@ -23,42 +24,46 @@ template.innerHTML = `
     <div class="input-methods">
       <div class="input-method-card" data-action="paste">
         <span class="icon">📝</span>
-        <span>Paste Text</span>
+        <span data-i18n="shelf.paste">Paste Text</span>
       </div>
       <div class="input-method-card" data-action="upload-epub">
         <span class="icon">📚</span>
-        <span>Upload EPUB</span>
+        <span data-i18n="shelf.uploadEpub">Upload EPUB</span>
       </div>
       <div class="input-method-card" data-action="upload-html">
         <span class="icon">🌐</span>
-        <span>Upload HTML</span>
+        <span data-i18n="shelf.uploadHtml">Upload HTML</span>
       </div>
     </div>
     <input type="file" id="epub-input" accept=".epub" style="display:none">
     <input type="file" id="html-input" accept=".html,.htm" style="display:none">
 
     <div id="text-input-area" class="text-input-area" style="display:none">
-      <textarea id="paste-textarea" placeholder="Paste English text here..."></textarea>
+      <textarea id="paste-textarea" data-i18n-placeholder="shelf.pastePlaceholder" placeholder="Paste English text here..."></textarea>
       <div class="text-input-actions">
-        <button id="cancel-paste" class="btn">Cancel</button>
-        <button id="submit-paste" class="btn primary">Add Document</button>
+        <button id="cancel-paste" class="btn" data-i18n="shelf.cancel">Cancel</button>
+        <button id="submit-paste" class="btn primary" data-i18n="shelf.addDocument">Add Document</button>
       </div>
     </div>
 
     <div id="loading-indicator" class="loading" style="display:none">
       <div class="spinner"></div>
-      <span>Processing...</span>
+      <span data-i18n="shelf.processing">Processing...</span>
     </div>
 
     <div id="shelf-list" class="shelf-grid"></div>
 
     <div id="empty-state" class="empty-state">
-      <p>No documents yet.<br>Paste text or upload an EPUB to get started.</p>
+      <p data-i18n="shelf.empty">No documents yet.</p>
+      <p data-i18n="shelf.emptyHint">Paste text or upload an EPUB to get started.</p>
     </div>
   </div>
 `;
 
 export class WwShelf extends HTMLElement {
+  /** @type {(() => void)|null} */
+  #onLangChange = null;
+
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -74,12 +79,27 @@ export class WwShelf extends HTMLElement {
     this.shadowRoot.querySelector('#cancel-paste').addEventListener('click', () => this.#hidePasteInput());
     this.shadowRoot.querySelector('#submit-paste').addEventListener('click', () => this.#submitPaste());
 
+    applyI18n(this.shadowRoot);
+    this.#onLangChange = () => {
+      applyI18n(this.shadowRoot);
+      this.#render();
+    };
+    document.addEventListener('ww:langchange', this.#onLangChange);
+
     this.#render();
+  }
+
+  disconnectedCallback() {
+    if (this.#onLangChange) {
+      document.removeEventListener('ww:langchange', this.#onLangChange);
+      this.#onLangChange = null;
+    }
   }
 
   async #render() {
     const list = this.shadowRoot.querySelector('#shelf-list');
     const empty = this.shadowRoot.querySelector('#empty-state');
+    const locale = getLang() === 'zh' ? 'zh-CN' : 'en-US';
 
     try {
       const docs = await getDocuments();
@@ -87,10 +107,10 @@ export class WwShelf extends HTMLElement {
         <div class="document-card" data-id="${doc.id}">
           <div class="doc-info">
             <div class="doc-title">${this.#escapeHtml(doc.title)}</div>
-            <div class="doc-meta">${doc.type} · ${new Date(doc.updatedAt ?? doc.createdAt).toLocaleDateString()}</div>
+            <div class="doc-meta">${t('type.' + doc.type)} · ${new Date(doc.updatedAt ?? doc.createdAt).toLocaleDateString(locale)}</div>
           </div>
           <div class="doc-actions">
-            <button class="delete-btn" data-id="${doc.id}">Delete</button>
+            <button class="delete-btn" data-id="${doc.id}">${t('shelf.delete')}</button>
           </div>
         </div>
       `).join('');
@@ -112,7 +132,7 @@ export class WwShelf extends HTMLElement {
           const id = parseInt(btn.dataset.id);
           await deleteDocument(id);
           this.#render();
-          toast('Document deleted', 'success');
+          toast(t('shelf.deleted'), 'success');
         });
       });
     } catch (err) {
@@ -142,7 +162,7 @@ export class WwShelf extends HTMLElement {
       const annotated = annotateHtml(text, level, [], []);
 
       const doc = {
-        title: text.split('\n')[0].slice(0, 60) || 'Pasted Text',
+        title: text.split('\n')[0].slice(0, 60) || t('shelf.pastedTitle'),
         type: 'text',
         content: annotated,
         rawContent: text,
@@ -152,11 +172,11 @@ export class WwShelf extends HTMLElement {
 
       this.#hidePasteInput();
       this.#showLoading(false);
-      toast('Document added', 'success');
+      toast(t('shelf.added'), 'success');
       this.#render();
     } catch (err) {
       this.#showLoading(false);
-      toast('Failed to process text: ' + err.message, 'error');
+      toast(t('shelf.addFailed', { msg: err.message }), 'error');
       console.error(err);
     }
   }
@@ -188,11 +208,11 @@ export class WwShelf extends HTMLElement {
 
       await saveDocument(doc);
       this.#showLoading(false);
-      toast('EPUB imported', 'success');
+      toast(t('shelf.epubImported'), 'success');
       this.#render();
     } catch (err) {
       this.#showLoading(false);
-      toast('Failed to import EPUB: ' + err.message, 'error');
+      toast(t('shelf.epubImportFailed', { msg: err.message }), 'error');
       console.error(err);
     }
 
@@ -211,7 +231,7 @@ export class WwShelf extends HTMLElement {
       const annotated = annotateHtml(html, level, [], []);
 
       const doc = {
-        title: file.name.replace(/\.(html?)$/i, '') || 'Uploaded HTML',
+        title: file.name.replace(/\.(html?)$/i, '') || t('shelf.uploadedHtmlTitle'),
         type: 'html',
         content: annotated,
         rawContent: html,
@@ -219,11 +239,11 @@ export class WwShelf extends HTMLElement {
 
       await saveDocument(doc);
       this.#showLoading(false);
-      toast('HTML imported', 'success');
+      toast(t('shelf.htmlImported'), 'success');
       this.#render();
     } catch (err) {
       this.#showLoading(false);
-      toast('Failed to import HTML: ' + err.message, 'error');
+      toast(t('shelf.htmlImportFailed', { msg: err.message }), 'error');
       console.error(err);
     }
 

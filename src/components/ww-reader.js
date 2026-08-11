@@ -14,15 +14,16 @@ import { applyCssInline, embedInternalCss } from '../lib/css.js';
 import { exportEpub, parseEpub, normalizeBuffer } from '../lib/epub.js';
 import { downloadFile, downloadBlob, toast, escapeHtml } from '../lib/utils.js';
 import { CEFR_LEVELS } from '../lib/gloss-engine.js';
+import { applyI18n, t } from '../lib/i18n.js';
 
 const template = document.createElement('template');
 template.innerHTML = `
   <link rel="stylesheet" href="src/styles/main.css">
   <div>
     <div class="reader-toolbar">
-      <button class="back-btn" id="back-btn">← Back</button>
+      <button class="back-btn" id="back-btn" data-i18n="reader.back">← Back</button>
       <div class="level-selector">
-        <label for="level-select">Level:</label>
+        <label for="level-select" data-i18n="reader.level">Level:</label>
         <select id="level-select">
           ${CEFR_LEVELS.map(l => `<option value="${l}">${l}</option>`).join('')}
         </select>
@@ -32,7 +33,7 @@ template.innerHTML = `
         <span id="chapter-indicator">1 / 1</span>
         <button id="next-chapter" class="btn">→</button>
       </div>
-      <button id="export-btn" class="btn" data-copy-label="Copy" hidden>Copy</button>
+      <button id="export-btn" class="btn" hidden>Copy</button>
     </div>
     <div class="reader-layout" id="reader-layout">
       <nav class="toc-panel" id="toc-panel" hidden></nav>
@@ -43,7 +44,7 @@ template.innerHTML = `
     </div>
     <div id="reader-loading" class="loading">
       <div class="spinner"></div>
-      <span>Loading...</span>
+      <span data-i18n="reader.loading">Loading...</span>
     </div>
   </div>
 `;
@@ -67,6 +68,8 @@ export class WwReader extends HTMLElement {
   #fileNames = [];
   /** @type {number} */
   #chapterIndex = 0;
+  /** @type {(() => void)|null} */
+  #onLangChange = null;
 
   constructor() {
     super();
@@ -80,6 +83,21 @@ export class WwReader extends HTMLElement {
     this.shadowRoot.querySelector('#export-btn').addEventListener('click', () => this.#export());
     this.shadowRoot.querySelector('#prev-chapter').addEventListener('click', () => this.#goToChapter(this.#chapterIndex - 1));
     this.shadowRoot.querySelector('#next-chapter').addEventListener('click', () => this.#goToChapter(this.#chapterIndex + 1));
+
+    applyI18n(this.shadowRoot);
+    this.#onLangChange = () => {
+      applyI18n(this.shadowRoot);
+      this.#updateExportLabel();
+      if (this.#doc?.type === 'epub') this.#buildToc();
+    };
+    document.addEventListener('ww:langchange', this.#onLangChange);
+  }
+
+  disconnectedCallback() {
+    if (this.#onLangChange) {
+      document.removeEventListener('ww:langchange', this.#onLangChange);
+      this.#onLangChange = null;
+    }
   }
 
   /** @param {number} docId */
@@ -93,7 +111,7 @@ export class WwReader extends HTMLElement {
     try {
       this.#doc = await getDocument(docId);
       if (!this.#doc) {
-        this.shadowRoot.querySelector('#reader-content').innerHTML = '<p>Document not found.</p>';
+        this.shadowRoot.querySelector('#reader-content').innerHTML = `<p>${t('reader.notFound')}</p>`;
         this.#showLoading(false);
         return;
       }
@@ -116,17 +134,25 @@ export class WwReader extends HTMLElement {
       // Plain-text docs export by copying the ruby fragment; others download a file.
       const exportBtn = this.shadowRoot.querySelector('#export-btn');
       exportBtn.hidden = false;
-      exportBtn.textContent = this.#doc.type === 'text'
-        ? (exportBtn.dataset.copyLabel || 'Copy')
-        : 'Export';
+      this.#updateExportLabel();
 
       this.#render();
       this.#showLoading(false);
     } catch (err) {
       this.#showLoading(false);
-      toast('Failed to load document: ' + err.message, 'error');
+      toast(t('reader.loadFailed', { msg: err.message }), 'error');
       console.error(err);
     }
+  }
+
+  /**
+   * Label the export button by document type: plain text copies a ruby
+   * fragment, everything else downloads a file.
+   */
+  #updateExportLabel() {
+    if (!this.#doc) return;
+    const exportBtn = this.shadowRoot.querySelector('#export-btn');
+    exportBtn.textContent = this.#doc.type === 'text' ? t('reader.copy') : t('reader.export');
   }
 
   /**
@@ -177,7 +203,7 @@ export class WwReader extends HTMLElement {
     panel.innerHTML = '';
     const header = document.createElement('div');
     header.className = 'toc-header';
-    header.textContent = '目录';
+    header.textContent = t('reader.toc');
     panel.appendChild(header);
 
     const list = document.createElement('ul');
@@ -187,7 +213,7 @@ export class WwReader extends HTMLElement {
       const button = document.createElement('button');
       button.type = 'button';
       const name = this.#fileNames[i];
-      button.textContent = name || `Chapter ${i + 1}`;
+      button.textContent = name || t('reader.chapter', { n: i + 1 });
       button.title = name || button.textContent;
       button.classList.toggle('active', i === this.#chapterIndex);
       button.addEventListener('click', () => this.#goToChapter(i));
@@ -363,7 +389,7 @@ export class WwReader extends HTMLElement {
     this.#level = e.target.value;
     await setProficiencyLevel(this.#level);
     this.#render();
-    toast(`Level changed to ${this.#level}`, 'info');
+    toast(t('reader.levelChanged', { level: this.#level }), 'info');
   }
 
   async #export() {
@@ -384,9 +410,9 @@ export class WwReader extends HTMLElement {
         }
         try {
           await navigator.clipboard.writeText(annotated);
-          toast('Copied to clipboard', 'success');
+          toast(t('reader.copied'), 'success');
         } catch (err) {
-          toast('Copy failed: ' + err.message, 'error');
+          toast(t('reader.copyFailed', { msg: err.message }), 'error');
         }
         return;
       }
@@ -398,7 +424,7 @@ export class WwReader extends HTMLElement {
           return annotateHtml(html, this.#level, this.#blacklist, this.#whitelist);
         }, this.#customCss);
         downloadBlob(blob, this.#doc.title.replace(/[^a-zA-Z0-9_\-]/g, '_') + '_annotated.epub');
-        toast('EPUB exported', 'success');
+        toast(t('reader.epubExported'), 'success');
       } else {
         // Export as HTML
         const rawContent = this.#doc.rawContent
@@ -422,10 +448,10 @@ export class WwReader extends HTMLElement {
           }
           downloadFile(html, this.#doc.title.replace(/[^a-zA-Z0-9_\-]/g, '_') + '.html', 'text/html');
         }
-        toast('HTML exported', 'success');
+        toast(t('reader.htmlExported'), 'success');
       }
     } catch (err) {
-      toast('Export failed: ' + err.message, 'error');
+      toast(t('reader.exportFailed', { msg: err.message }), 'error');
       console.error(err);
     }
   }

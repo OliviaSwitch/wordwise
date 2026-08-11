@@ -8,14 +8,19 @@ import './ww-shelf.js';
 import './ww-reader.js';
 import './ww-settings.js';
 import { initGloss } from '../lib/annotator.js';
+import { applyI18n, getLang, setLang } from '../lib/i18n.js';
 
 const template = document.createElement('template');
 template.innerHTML = `
   <link rel="stylesheet" href="src/styles/main.css">
   <div>
     <nav class="top-nav">
-      <a data-view="shelf" class="active">Shelf</a>
-      <a data-view="settings">Settings</a>
+      <a data-view="shelf" class="active" data-i18n="nav.shelf">Shelf</a>
+      <a data-view="settings" data-i18n="nav.settings">Settings</a>
+      <select id="lang-select" class="lang-select" aria-label="Language">
+        <option value="en">English</option>
+        <option value="zh">中文</option>
+      </select>
     </nav>
     <main id="main-content"></main>
   </div>
@@ -26,6 +31,8 @@ export class WwApp extends HTMLElement {
   #currentView = 'shelf';
   /** @type {number|null} */
   #currentDocId = null;
+  /** @type {(() => void)|null} */
+  #onLangChange = null;
 
   constructor() {
     super();
@@ -61,7 +68,22 @@ export class WwApp extends HTMLElement {
       }
     });
 
+    // Language switcher — reflect the current language and re-apply nav labels.
+    applyI18n(this.shadowRoot);
+    const langSelect = this.shadowRoot.querySelector('#lang-select');
+    langSelect.value = getLang();
+    langSelect.addEventListener('change', (e) => setLang(e.target.value));
+    this.#onLangChange = () => applyI18n(this.shadowRoot);
+    document.addEventListener('ww:langchange', this.#onLangChange);
+
     this.#navigateTo('shelf');
+  }
+
+  disconnectedCallback() {
+    if (this.#onLangChange) {
+      document.removeEventListener('ww:langchange', this.#onLangChange);
+      this.#onLangChange = null;
+    }
   }
 
   #navigateTo(view, docId = null) {

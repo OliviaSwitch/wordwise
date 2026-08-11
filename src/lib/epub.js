@@ -11,6 +11,8 @@
  * JSZip is loaded globally via <script> tag in index.html (UMD build).
  */
 
+import { t } from './i18n.js';
+
 function getJSZip() {
   if (!window.JSZip || !window.JSZip.loadAsync) {
     throw new Error('JSZip not loaded. Ensure the script tag is present in index.html.');
@@ -166,7 +168,7 @@ function parseContainerXml(xml) {
 function parseOpf(xml, opfDir) {
   // Extract title
   const titleMatch = xml.match(/<dc:title[^>]*>([^<]+)<\/dc:title>/);
-  const title = titleMatch ? titleMatch[1].trim() : 'Untitled';
+  const title = titleMatch ? titleMatch[1].trim() : t('epub.untitled');
 
   // Build manifest map: id → href
   const manifest = {};

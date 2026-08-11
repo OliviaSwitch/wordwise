@@ -63,6 +63,18 @@ ww-app {
 .top-nav a:hover { background: var(--color-border); color: var(--color-text); }
 .top-nav a.active { background: var(--color-primary); color: white; }
 
+/* Language switcher — pinned to the right edge of the nav. */
+.top-nav .lang-select {
+  margin-left: auto;
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
 /* ── Buttons ── */
 button, .btn {
   display: inline-flex;
