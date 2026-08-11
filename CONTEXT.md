@@ -41,5 +41,5 @@ Words at or below the user's Proficiency Level that the user does not actually k
 _Avoid_: word list, vocabulary book, glossary, exceptions
 
 **Config**:
-An exportable/importable file containing the user's Proficiency Level, Blacklist, and Whitelist. Does not include Documents or reading progress.
+An exportable/importable file containing the user's Proficiency Level, Blacklist, Whitelist, and Custom CSS. Does not include Documents, reading progress, or the UI language (a browser-local preference).
 _Avoid_: settings file, profile

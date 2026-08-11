@@ -52,7 +52,11 @@ All inputs become a **Document** and appear on the **Shelf**.
 - Proficiency Level selector (A1–C2)
 - Blacklist batch editor (view, add, remove, search)
 - Whitelist batch editor (view, add, remove, search)
-- Config import/export (JSON file containing level + Blacklist + Whitelist)
+- Config import/export (JSON file containing level + Blacklist + Whitelist + Custom CSS)
+
+## Localization
+
+The UI ships in English and Chinese. On first visit the language follows the browser (zh → Chinese, otherwise English); a dropdown at the right of the top nav switches at any time and the choice is remembered locally. The UI language is a display preference and is not part of the Config export/import.
 
 ## Data Storage
 
