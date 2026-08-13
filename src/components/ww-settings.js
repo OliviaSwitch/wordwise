@@ -7,10 +7,10 @@
  * - Config import/export
  */
 
-import { getProficiencyLevel, setProficiencyLevel, getBlacklist, setBlacklist, getWhitelist, setWhitelist, getCustomCss, setCustomCss, exportConfig, importConfig } from '../lib/storage.js';
+import { getProficiencyLevel, setProficiencyLevel, getBlacklist, setBlacklist, getWhitelist, setWhitelist, getCustomCss, setCustomCss, exportConfig, importConfig, clearAllData } from '../lib/storage.js';
 import { downloadFile, toast } from '../lib/utils.js';
 import { CEFR_LEVELS } from '../lib/gloss-engine.js';
-import { applyI18n, t } from '../lib/i18n.js';
+import { applyI18n, resetLang, t } from '../lib/i18n.js';
 
 const template = document.createElement('template');
 template.innerHTML = `
@@ -93,6 +93,30 @@ template.innerHTML = `
       </div>
       <input type="file" id="config-file-input" accept=".json" style="display:none">
     </div>
+
+    <!-- Clear All Cache -->
+    <div class="settings-section">
+      <h2 data-i18n="settings.clearCache">Clear All Cache</h2>
+      <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-bottom:12px;" data-i18n="settings.clearCacheHint">
+        Delete all documents, settings (proficiency level, blacklist, whitelist, custom CSS) and language preference. This cannot be undone.
+      </p>
+      <div class="config-actions">
+        <button id="clear-cache-btn" class="btn danger" data-i18n="settings.clearCache">Clear All Cache</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="clear-modal" hidden>
+    <div class="modal">
+      <h2 data-i18n="settings.clearCache">Clear All Cache</h2>
+      <p style="color:var(--color-text-secondary);font-size:0.9rem;" data-i18n="settings.clearCacheHint">
+        Delete all documents, settings (proficiency level, blacklist, whitelist, custom CSS) and language preference. This cannot be undone.
+      </p>
+      <div class="modal-actions">
+        <button id="clear-cancel" class="btn" data-i18n="settings.cancel">Cancel</button>
+        <button id="clear-confirm" class="btn danger" data-i18n="settings.clearCacheConfirm">Clear All Data</button>
+      </div>
+    </div>
   </div>
 `;
 
@@ -141,6 +165,11 @@ export class WwSettings extends HTMLElement {
     this.shadowRoot.querySelector('#export-config-btn').addEventListener('click', () => this.#exportConfig());
     this.shadowRoot.querySelector('#import-config-btn').addEventListener('click', () => this.#selectConfigFile());
     this.shadowRoot.querySelector('#config-file-input').addEventListener('change', (e) => this.#importConfig(e));
+
+    // Clear All Cache
+    this.shadowRoot.querySelector('#clear-cache-btn').addEventListener('click', () => this.#showClearModal());
+    this.shadowRoot.querySelector('#clear-cancel').addEventListener('click', () => this.#hideClearModal());
+    this.shadowRoot.querySelector('#clear-confirm').addEventListener('click', () => this.#clearAll());
 
     applyI18n(this.shadowRoot);
     this.#onLangChange = () => {
@@ -286,6 +315,26 @@ export class WwSettings extends HTMLElement {
     }
 
     e.target.value = '';
+  }
+
+  #showClearModal() {
+    this.shadowRoot.querySelector('#clear-modal').hidden = false;
+  }
+
+  #hideClearModal() {
+    this.shadowRoot.querySelector('#clear-modal').hidden = true;
+  }
+
+  async #clearAll() {
+    try {
+      await clearAllData();
+      resetLang();
+      // Hard reload — drops the cached gloss index and every module-level
+      // setting, presenting the app in its fresh state.
+      location.reload();
+    } catch (err) {
+      toast(t('settings.clearFailed', { msg: err.message }), 'error');
+    }
   }
 
   #escapeHtml(s) {

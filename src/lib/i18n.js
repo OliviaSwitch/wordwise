@@ -86,6 +86,11 @@ export const messages = {
     'settings.configExported': 'Config exported',
     'settings.configImported': 'Config imported',
     'settings.importFailed': 'Import failed: {msg}',
+    'settings.clearCache': 'Clear All Cache',
+    'settings.clearCacheHint': 'Delete all documents, settings (proficiency level, blacklist, whitelist, custom CSS) and language preference. This cannot be undone.',
+    'settings.clearCacheConfirm': 'Clear All Data',
+    'settings.cancel': 'Cancel',
+    'settings.clearFailed': 'Failed to clear data: {msg}',
     // EPUB
     'epub.untitled': 'Untitled',
   },
@@ -163,6 +168,11 @@ export const messages = {
     'settings.configExported': '配置已导出',
     'settings.configImported': '配置已导入',
     'settings.importFailed': '导入失败：{msg}',
+    'settings.clearCache': '清除全部缓存',
+    'settings.clearCacheHint': '删除所有文档、设置（熟练度等级、黑名单、白名单、自定义 CSS）和语言偏好。此操作无法撤销。',
+    'settings.clearCacheConfirm': '清除全部数据',
+    'settings.cancel': '取消',
+    'settings.clearFailed': '清除数据失败：{msg}',
     // EPUB
     'epub.untitled': '未命名',
   },
@@ -216,6 +226,22 @@ export function setLang(lang) {
   }
   document.documentElement.lang = lang;
   document.dispatchEvent(new CustomEvent('ww:langchange', { detail: { lang } }));
+}
+
+/**
+ * Forget the stored language preference and fall back to browser detection.
+ * Used by the "clear all cache" flow, after which the page reloads.
+ */
+export function resetLang() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Non-fatal — the in-memory reset below still applies.
+  }
+  currentLang = detectLang();
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = currentLang;
+  }
 }
 
 /**

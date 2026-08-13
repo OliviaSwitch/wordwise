@@ -180,6 +180,27 @@ export async function deleteDocument(id) {
 // ── Config export/import ──
 
 /**
+ * Delete the entire database and all local settings, returning the app to a
+ * fresh state. Closes the cached connection first so `deleteDatabase` isn't
+ * blocked; the next `openDB()` recreates the schema via `onupgradeneeded`.
+ * @returns {Promise<void>}
+ */
+export async function clearAllData() {
+  if (dbPromise) {
+    const db = await dbPromise;
+    db.close();
+    dbPromise = null;
+  }
+  await new Promise((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(DB_NAME);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+    // `onblocked` fires only if another tab holds the DB open — ignore it;
+    // the deletion completes once that tab closes.
+  });
+}
+
+/**
  * Export config as a downloadable JSON object.
  * @returns {Promise<{level: string, blacklist: string[], whitelist: string[], customCss: string}>}
  */

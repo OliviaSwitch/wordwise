@@ -594,6 +594,11 @@ button:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
   z-index: 900;
 }
 
+/* `display: flex` above overrides the hidden attribute's default, so re-hide explicitly. */
+.modal-overlay[hidden] {
+  display: none;
+}
+
 .modal {
   background: var(--color-surface);
   border-radius: var(--radius);
