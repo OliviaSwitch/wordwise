@@ -7,8 +7,9 @@
 import './ww-shelf.js';
 import './ww-reader.js';
 import './ww-settings.js';
-import { initGloss } from '../lib/annotator.js';
-import { applyI18n, getLang, setLang } from '../lib/i18n.js';
+import { initGloss, isGlossReady, importGlossData } from '../lib/annotator.js';
+import { applyI18n, getLang, setLang, t } from '../lib/i18n.js';
+import { toast } from '../lib/utils.js';
 
 const template = document.createElement('template');
 template.innerHTML = `
@@ -22,6 +23,11 @@ template.innerHTML = `
         <option value="zh">中文</option>
       </select>
     </nav>
+    <div id="gloss-warning" class="gloss-warning" hidden>
+      <span class="gloss-warning-text" data-i18n="gloss.warning">Gloss pack data (en-zh.json) is missing.</span>
+      <button type="button" id="gloss-import-btn" class="btn gloss-import-btn" data-i18n="gloss.importBtn">Import Gloss Pack</button>
+      <input type="file" id="gloss-file" accept=".json" hidden>
+    </div>
     <main id="main-content"></main>
   </div>
 `;
@@ -41,11 +47,12 @@ export class WwApp extends HTMLElement {
   }
 
   async connectedCallback() {
-    // Initialize gloss data on load
-    try {
-      await initGloss();
-    } catch (err) {
-      console.warn('Gloss data not loaded yet, will retry on first use:', err);
+    // Initialize gloss data on load. With no network copy and no imported
+    // pack it resolves empty instead of throwing, and the banner below offers
+    // a manual import.
+    await initGloss();
+    if (!isGlossReady()) {
+      this.shadowRoot.querySelector('#gloss-warning').hidden = false;
     }
 
     // Setup nav
@@ -56,6 +63,26 @@ export class WwApp extends HTMLElement {
           this.#navigateTo(view);
         }
       });
+    });
+
+    // Gloss pack import — feeds the "no data" banner. On success the page
+    // reloads so the freshly persisted pack is picked up everywhere.
+    const glossFileInput = this.shadowRoot.querySelector('#gloss-file');
+    this.shadowRoot.querySelector('#gloss-import-btn').addEventListener('click', () => {
+      glossFileInput.click();
+    });
+    glossFileInput.addEventListener('change', async () => {
+      const file = glossFileInput.files?.[0];
+      glossFileInput.value = '';
+      if (!file) return;
+      try {
+        const data = JSON.parse(await file.text());
+        await importGlossData(data);
+        // Reload so every view re-annotates with the freshly imported pack.
+        location.reload();
+      } catch (err) {
+        toast(t('gloss.importFailed', { msg: err.message }), 'error');
+      }
     });
 
     // Listen for navigate events from children

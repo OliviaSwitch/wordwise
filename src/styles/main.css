@@ -75,6 +75,33 @@ ww-app {
   cursor: pointer;
 }
 
+/* ── Gloss import banner ── */
+/* `display: flex` above overrides the hidden attribute's default, so re-hide explicitly. */
+.gloss-warning[hidden] { display: none; }
+
+.gloss-warning {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  border: 1px solid #fcd34d;
+  border-radius: var(--radius);
+  background: #fffbeb;
+  color: #78350f;
+  font-size: 0.875rem;
+}
+
+.gloss-warning .gloss-warning-text { flex: 1; }
+
+.gloss-warning .gloss-import-btn {
+  flex-shrink: 0;
+  background: var(--color-warning);
+  border-color: var(--color-warning);
+  color: white;
+}
+.gloss-warning .gloss-import-btn:hover { background: #b45309; border-color: #b45309; }
+
 /* ── Buttons ── */
 button, .btn {
   display: inline-flex;

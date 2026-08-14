@@ -18,22 +18,67 @@
  */
 
 import { GlossIndex, planGlosses, CEFR_LEVELS } from './gloss-engine.js';
+import { saveGlossPack, loadGlossPack } from './storage.js';
 
 export { CEFR_LEVELS } from './gloss-engine.js';
 
 /** @type {GlossIndex|null} */
 let glossIndex = null;
 let glossLoadPromise = null;
+let glossReady = false;
+
+/**
+ * Whether gloss data is loaded and annotation can run. When false, the app
+ * degrades to plain-text reading and the shell shows an import prompt.
+ * @returns {boolean}
+ */
+export function isGlossReady() {
+  return glossReady;
+}
 
 /**
  * Initialize the gloss index. Called once at app startup.
+ *
+ * Prefers the network copy shipped with the deployment, then falls back to
+ * the IndexedDB copy (offline cache or a previously imported pack). Never
+ * rejects: with no data anywhere the index stays empty and annotation no-ops
+ * instead of crashing the reader.
  * @returns {Promise<void>}
  */
 export function initGloss() {
   if (glossLoadPromise) return glossLoadPromise;
   glossIndex = new GlossIndex();
-  glossLoadPromise = glossIndex.load('data/en-zh.json');
+  glossLoadPromise = (async () => {
+    try {
+      const resp = await fetch('data/en-zh.json');
+      if (!resp.ok) throw new Error(`Failed to load gloss data: ${resp.status}`);
+      const data = await resp.json();
+      glossIndex.ingest(data);
+      glossReady = true;
+      // Cache for offline use; a cache failure must not break the loaded pack.
+      saveGlossPack(data).catch(() => {});
+    } catch {
+      // Network unavailable or pack missing — fall back to the stored copy.
+      const cached = await loadGlossPack().catch(() => null);
+      if (cached) {
+        glossIndex.ingest(cached);
+        glossReady = true;
+      }
+    }
+  })();
   return glossLoadPromise;
+}
+
+/**
+ * Manually import a gloss pack from user-provided JSON data. Persists it so
+ * the next visit loads from IndexedDB without re-importing.
+ * @param {{entries: object, inflections: object}} data — parsed en-zh.json
+ */
+export async function importGlossData(data) {
+  if (!glossIndex) glossIndex = new GlossIndex();
+  glossIndex.ingest(data); // throws on invalid shape
+  glossReady = true;
+  await saveGlossPack(data);
 }
 
 /**

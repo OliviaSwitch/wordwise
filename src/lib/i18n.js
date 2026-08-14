@@ -91,6 +91,10 @@ export const messages = {
     'settings.clearCacheConfirm': 'Clear All Data',
     'settings.cancel': 'Cancel',
     'settings.clearFailed': 'Failed to clear data: {msg}',
+    // Gloss
+    'gloss.warning': 'Gloss pack data (en-zh.json) is missing. Import it from a local file to enable annotations.',
+    'gloss.importBtn': 'Import Gloss Pack',
+    'gloss.importFailed': 'Gloss pack import failed: {msg}',
     // EPUB
     'epub.untitled': 'Untitled',
   },
@@ -173,6 +177,10 @@ export const messages = {
     'settings.clearCacheConfirm': '清除全部数据',
     'settings.cancel': '取消',
     'settings.clearFailed': '清除数据失败：{msg}',
+    // Gloss
+    'gloss.warning': '词包数据（en-zh.json）缺失。请从本地文件导入以启用标注。',
+    'gloss.importBtn': '导入词包',
+    'gloss.importFailed': '词包导入失败：{msg}',
     // EPUB
     'epub.untitled': '未命名',
   },

@@ -1,15 +1,16 @@
 /**
  * Storage — IndexedDB persistence layer
  *
- * Stores Documents, Blacklist, Whitelist, and Proficiency Level.
- * All async, all client-side.
+ * Stores Documents, Blacklist, Whitelist, Proficiency Level, and the cached
+ * Gloss Pack. All async, all client-side.
  */
 
 const DB_NAME = 'wordwise';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORES = {
   documents: '++id, title, &type, createdAt, updatedAt',
   settings: 'key',
+  gloss: 'key',
 };
 
 let dbPromise = null;
@@ -26,6 +27,9 @@ function openDB() {
       }
       if (!db.objectStoreNames.contains('settings')) {
         db.createObjectStore('settings', { keyPath: 'key' });
+      }
+      if (!db.objectStoreNames.contains('gloss')) {
+        db.createObjectStore('gloss', { keyPath: 'key' });
       }
     };
     req.onsuccess = () => resolve(req.result);
@@ -131,6 +135,26 @@ export async function getCustomCss() {
 /** @param {string} css */
 export async function setCustomCss(css) {
   await put('settings', { key: SETTINGS.CUSTOM_CSS, value: css });
+}
+
+// ── Gloss Pack ──
+
+const GLOSS_KEY = 'en-zh';
+
+/**
+ * Persist the gloss pack ({ entries, inflections }) so annotation works
+ * offline and without re-importing on the next visit. Stored in the same DB
+ * as everything else, so "clear all cache" wipes it along with the rest.
+ * @param {object} data — parsed en-zh.json
+ */
+export async function saveGlossPack(data) {
+  await put('gloss', { key: GLOSS_KEY, value: data });
+}
+
+/** @returns {Promise<object|null>} — the stored gloss pack, or null. */
+export async function loadGlossPack() {
+  const entry = await get('gloss', GLOSS_KEY);
+  return entry?.value ?? null;
 }
 
 // ── Documents ──

@@ -66,6 +66,25 @@ export class GlossIndex {
   get loaded() { return this.#loaded; }
 
   /**
+   * Populate the index from parsed gloss data ({ entries, inflections }).
+   * Shared by both the network load and the manual import path.
+   * @param {{entries: Object<string, GlossEntry>, inflections: Object<string,string>}} data
+   */
+  ingest(data) {
+    if (!data || typeof data.entries !== 'object' || data.entries === null ||
+        typeof data.inflections !== 'object' || data.inflections === null) {
+      throw new Error('Invalid gloss data: expected { entries, inflections }');
+    }
+    for (const [word, entry] of Object.entries(data.entries)) {
+      this.#entries.set(word, entry);
+    }
+    for (const [inflected, lemma] of Object.entries(data.inflections)) {
+      this.#inflections.set(inflected, lemma);
+    }
+    this.#loaded = true;
+  }
+
+  /**
    * Load gloss data from a URL pointing to en-zh.json.
    * @param {string} url
    */
@@ -74,14 +93,7 @@ export class GlossIndex {
     this.#loadPromise = (async () => {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error(`Failed to load gloss data: ${resp.status}`);
-      const data = await resp.json();
-      for (const [word, entry] of Object.entries(data.entries)) {
-        this.#entries.set(word, entry);
-      }
-      for (const [inflected, lemma] of Object.entries(data.inflections)) {
-        this.#inflections.set(inflected, lemma);
-      }
-      this.#loaded = true;
+      this.ingest(await resp.json());
     })();
     return this.#loadPromise;
   }
