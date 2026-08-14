@@ -22,6 +22,35 @@ import { saveGlossPack, loadGlossPack } from './storage.js';
 
 export { CEFR_LEVELS } from './gloss-engine.js';
 
+const GLOSS_URL = 'data/en-zh.json';
+const FETCH_TIMEOUT = 8000;
+
+/**
+ * fetch with an abort timeout — a hung request must not block startup.
+ * @param {string} url
+ * @param {number} ms
+ */
+async function fetchWithTimeout(url, ms) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    const resp = await fetch(url, { signal: ctrl.signal });
+    if (!resp.ok) throw new Error(`Failed to load gloss data: ${resp.status}`);
+    return await resp.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Fetch and parse the gloss pack from the deployment. Used at startup and by
+ * the Settings "download" action.
+ * @returns {Promise<{entries: object, inflections: object}>}
+ */
+export async function downloadGlossData() {
+  return fetchWithTimeout(GLOSS_URL, FETCH_TIMEOUT);
+}
+
 /** @type {GlossIndex|null} */
 let glossIndex = null;
 let glossLoadPromise = null;
@@ -50,15 +79,13 @@ export function initGloss() {
   glossIndex = new GlossIndex();
   glossLoadPromise = (async () => {
     try {
-      const resp = await fetch('data/en-zh.json');
-      if (!resp.ok) throw new Error(`Failed to load gloss data: ${resp.status}`);
-      const data = await resp.json();
+      const data = await downloadGlossData();
       glossIndex.ingest(data);
       glossReady = true;
       // Cache for offline use; a cache failure must not break the loaded pack.
       saveGlossPack(data).catch(() => {});
-    } catch {
-      // Network unavailable or pack missing — fall back to the stored copy.
+    } catch (err) {
+      console.warn('Gloss pack unavailable, falling back to stored copy:', err);
       const cached = await loadGlossPack().catch(() => null);
       if (cached) {
         glossIndex.ingest(cached);

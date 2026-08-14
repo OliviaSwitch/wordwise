@@ -7,9 +7,8 @@
 import './ww-shelf.js';
 import './ww-reader.js';
 import './ww-settings.js';
-import { initGloss, isGlossReady, importGlossData } from '../lib/annotator.js';
-import { applyI18n, getLang, setLang, t } from '../lib/i18n.js';
-import { toast } from '../lib/utils.js';
+import { initGloss, isGlossReady } from '../lib/annotator.js';
+import { applyI18n, getLang, setLang } from '../lib/i18n.js';
 
 const template = document.createElement('template');
 template.innerHTML = `
@@ -25,8 +24,7 @@ template.innerHTML = `
     </nav>
     <div id="gloss-warning" class="gloss-warning" hidden>
       <span class="gloss-warning-text" data-i18n="gloss.warning">Gloss pack data (en-zh.json) is missing.</span>
-      <button type="button" id="gloss-import-btn" class="btn gloss-import-btn" data-i18n="gloss.importBtn">Import Gloss Pack</button>
-      <input type="file" id="gloss-file" accept=".json" hidden>
+      <button type="button" id="gloss-go-settings-btn" class="btn gloss-go-btn" data-i18n="gloss.goToSettings">Go to Settings</button>
     </div>
     <main id="main-content"></main>
   </div>
@@ -65,24 +63,10 @@ export class WwApp extends HTMLElement {
       });
     });
 
-    // Gloss pack import — feeds the "no data" banner. On success the page
-    // reloads so the freshly persisted pack is picked up everywhere.
-    const glossFileInput = this.shadowRoot.querySelector('#gloss-file');
-    this.shadowRoot.querySelector('#gloss-import-btn').addEventListener('click', () => {
-      glossFileInput.click();
-    });
-    glossFileInput.addEventListener('change', async () => {
-      const file = glossFileInput.files?.[0];
-      glossFileInput.value = '';
-      if (!file) return;
-      try {
-        const data = JSON.parse(await file.text());
-        await importGlossData(data);
-        // Reload so every view re-annotates with the freshly imported pack.
-        location.reload();
-      } catch (err) {
-        toast(t('gloss.importFailed', { msg: err.message }), 'error');
-      }
+    // Gloss pack recovery (download/import) lives in Settings — the banner
+    // shown above when data is missing just points there.
+    this.shadowRoot.querySelector('#gloss-go-settings-btn').addEventListener('click', () => {
+      this.#navigateTo('settings');
     });
 
     // Listen for navigate events from children

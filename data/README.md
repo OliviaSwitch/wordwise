@@ -1,15 +1,11 @@
 # WordWise — Gloss Pack Data
 
-The gloss pack (`en-zh.json`) is not stored in git due to its size (~1.8 MB).
-Download it from:
+The gloss pack (`en-zh.json`, ~1.8 MB) is committed to this repository and served
+alongside the app on GitHub Pages, so the deployed site has data out of the box.
 
-```
-https://github.com/readest/readest/raw/main/apps/readest-app/data/wordlens/en-zh.json
-```
+## Update
 
-Place the file at `data/en-zh.json` before running the app.
-
-## How to download
+To refresh the pack from upstream, download the file over the committed copy:
 
 ```bash
 curl -L -o data/en-zh.json \

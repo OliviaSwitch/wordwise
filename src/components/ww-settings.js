@@ -10,6 +10,7 @@
 import { getProficiencyLevel, setProficiencyLevel, getBlacklist, setBlacklist, getWhitelist, setWhitelist, getCustomCss, setCustomCss, exportConfig, importConfig, clearAllData } from '../lib/storage.js';
 import { downloadFile, toast } from '../lib/utils.js';
 import { CEFR_LEVELS } from '../lib/gloss-engine.js';
+import { downloadGlossData, importGlossData } from '../lib/annotator.js';
 import { applyI18n, resetLang, t } from '../lib/i18n.js';
 
 const template = document.createElement('template');
@@ -94,6 +95,19 @@ template.innerHTML = `
       <input type="file" id="config-file-input" accept=".json" style="display:none">
     </div>
 
+    <!-- Gloss Pack -->
+    <div class="settings-section">
+      <h2 data-i18n="settings.gloss">Gloss Pack</h2>
+      <p style="font-size:0.85rem;color:var(--color-text-secondary);margin-bottom:12px;" data-i18n="settings.glossHint">
+        The gloss pack (en-zh.json) drives annotation. Download it from the deployment, or import it from a local file.
+      </p>
+      <div class="config-actions">
+        <button id="download-gloss-btn" class="btn" data-i18n="settings.downloadGloss">Download Gloss Pack</button>
+        <button id="import-gloss-btn" class="btn" data-i18n="settings.importGloss">Import Gloss Pack</button>
+      </div>
+      <input type="file" id="gloss-file-input" accept=".json" style="display:none">
+    </div>
+
     <!-- Clear All Cache -->
     <div class="settings-section">
       <h2 data-i18n="settings.clearCache">Clear All Cache</h2>
@@ -165,6 +179,11 @@ export class WwSettings extends HTMLElement {
     this.shadowRoot.querySelector('#export-config-btn').addEventListener('click', () => this.#exportConfig());
     this.shadowRoot.querySelector('#import-config-btn').addEventListener('click', () => this.#selectConfigFile());
     this.shadowRoot.querySelector('#config-file-input').addEventListener('change', (e) => this.#importConfig(e));
+
+    // Gloss Pack
+    this.shadowRoot.querySelector('#download-gloss-btn').addEventListener('click', () => this.#downloadGloss());
+    this.shadowRoot.querySelector('#import-gloss-btn').addEventListener('click', () => this.#selectGlossFile());
+    this.shadowRoot.querySelector('#gloss-file-input').addEventListener('change', (e) => this.#importGloss(e));
 
     // Clear All Cache
     this.shadowRoot.querySelector('#clear-cache-btn').addEventListener('click', () => this.#showClearModal());
@@ -312,6 +331,38 @@ export class WwSettings extends HTMLElement {
       toast(t('settings.configImported'), 'success');
     } catch (err) {
       toast(t('settings.importFailed', { msg: err.message }), 'error');
+    }
+
+    e.target.value = '';
+  }
+
+  async #downloadGloss() {
+    try {
+      const data = await downloadGlossData();
+      await importGlossData(data);
+      toast(t('settings.glossDownloaded'), 'success');
+      // Reload so every view re-annotates with the freshly downloaded pack.
+      location.reload();
+    } catch (err) {
+      toast(t('settings.glossDownloadFailed', { msg: err.message }), 'error');
+    }
+  }
+
+  #selectGlossFile() {
+    this.shadowRoot.querySelector('#gloss-file-input').click();
+  }
+
+  async #importGloss(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const data = JSON.parse(await file.text());
+      await importGlossData(data);
+      toast(t('settings.glossImported'), 'success');
+      location.reload();
+    } catch (err) {
+      toast(t('settings.glossImportFailed', { msg: err.message }), 'error');
     }
 
     e.target.value = '';

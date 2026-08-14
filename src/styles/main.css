@@ -94,13 +94,13 @@ ww-app {
 
 .gloss-warning .gloss-warning-text { flex: 1; }
 
-.gloss-warning .gloss-import-btn {
+.gloss-warning .gloss-go-btn {
   flex-shrink: 0;
   background: var(--color-warning);
   border-color: var(--color-warning);
   color: white;
 }
-.gloss-warning .gloss-import-btn:hover { background: #b45309; border-color: #b45309; }
+.gloss-warning .gloss-go-btn:hover { background: #b45309; border-color: #b45309; }
 
 /* ── Buttons ── */
 button, .btn {

@@ -38,8 +38,3 @@ Thumbs.db
 CLAUDE.md
 # GitHub 本地敏感配置
 .github-local/
-
-# --- 数据文件（WordWise 特有） ---
-# 体积庞大的 Gloss Pack（en-zh.json）按源从上游获取，不入库
-data/*.json
-!data/.gitkeep
